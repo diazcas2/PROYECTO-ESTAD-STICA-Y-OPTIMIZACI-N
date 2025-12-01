@@ -27,6 +27,14 @@ datos <- read_csv("stock_returns_train.csv")
 # Predicción de rendimientos
 **1. Obten un modelo pronósticos para Xi tXi 0,...,Xt − 1i para i = 1,2,...,5. Utilizando los datos Xtrain como consideres apropiado.**
 
+**2. Obten tanto el valor esperado del pronóstico E[Xi tXi 0,...,Xt − 1i] como la varianza V [Xi tXi 0,...,Xt − 1i].**
+
+
+**3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
+
+**4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
+
+1)
 ```{r}
 # Seleccionar 5 primeras columnas numéricas
 num_cols <- names(datos)[sapply(datos, is.numeric)]
@@ -52,26 +60,41 @@ for (asset in assets) {
   cat("\nModelo para", asset, ":\n")
   print(mod)
 }
+
+names(modelos) <- paste0("Modelo", seq_along(modelos))
 ```
 
 
-**2. Obten tanto el valor esperado del pron´ostico E[Xi tXi 0,...,Xt − 1i] como la varianza V [Xi tXi 0,...,Xt − 1i].**
+4) Vemos conveniente la realización de la función oneStepAhead, para responder al segundo apartado.
+
 
 ```{r}
+oneStepAhead <- function(X_past, modelos) {
+  mu  <- numeric(length(modelos))
+  sig2 <- numeric(length(modelos))
+  
+  names(mu)   <- names(modelos)
+  names(sig2) <- names(modelos)
+  
+  for (asset in names(modelos)) {
+    serie <- as.numeric(na.omit(X_past[[asset]]))
+    serie_ts <- ts(serie)
+    
+    # Actualizamos usando TODO el pasado disponible
+    mod_upd <- Arima(serie_ts, model = modelos[[asset]])
+    
+    fc <- forecast(mod_upd, h = 1)
+    
+    mu[asset]   <- as.numeric(fc$mean[1])           # E[X_{t+1} | pasado]
+    sig2[asset] <- as.numeric(mod_upd[["sigma2"]]) # Varianza del modelo
+  }
+  
+  return(list(mean = mu, var = sig2))
+}
 
 ```
 
-
-**3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
-
 ```{r}
-
-```
-
-
-**4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
-
-```{r}
-
+oneStepAhead( datos[, assets],modelos)
 ```
 
