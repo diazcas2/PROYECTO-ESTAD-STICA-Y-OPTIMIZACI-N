@@ -19,6 +19,7 @@ library(dplyr)
 library(jsonlite)
 library(readr)
 datos <- read_csv("stock_returns_train.csv")
+View(datos)
 ```
 
 
