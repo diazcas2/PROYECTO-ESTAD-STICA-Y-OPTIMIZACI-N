@@ -9,3 +9,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(readr)
+library(forecast)   
+library(tseries)    
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(jsonlite)
+library(readr)
+datos <- read_csv("stock_returns_train.csv")
+```
+
+
