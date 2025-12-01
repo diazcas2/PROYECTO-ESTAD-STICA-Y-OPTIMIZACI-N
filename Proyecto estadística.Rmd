@@ -24,7 +24,7 @@ datos <- read_csv("stock_returns_train.csv")
 # 1. Planteamiento
 **Tu equipo ha decidido invertir en un portafolio con 5 activos. Cuentas con un historico de rendimientos ri t para t = 1,...,T y i = 1,...,5 . Quieres usar este histórico para decidir como repartiras tu inversión inicial I0 en los 5 activos. Es decir que quieres decidir sobre los valores αi t con αi t = 1 para t = T+1,...,T + r, en función del rendimiento que esperas de cada activo para el proximo periodo y de una funci´on de utilidad que describe tus preferencias.**
 
-# Predicción de rendimientos
+# 2. Predicción de rendimientos
 **1. Obten un modelo pronósticos para Xi tXi 0,...,Xt − 1i para i = 1,2,...,5. Utilizando los datos Xtrain como consideres apropiado.**
 
 1)
@@ -109,6 +109,27 @@ mean(pred_var[, 1],na.rm = TRUE)
 
 Por lo que se demuestra que el modelo 1 es ruido blanco, por tener media 0 y varianza finita.
 
+En resumen: 
+```{r}
+cat('El valor esperado del modelo X1:', mean(pred_mean[, 1],na.rm = TRUE))
+cat('La varianza del modelo X1:', mean(pred_var[, 1],na.rm = TRUE))
+
+cat('El valor esperado del modelo X2:', mean(pred_mean[, 2],na.rm = TRUE))
+cat('La varianza del modelo X2:', mean(pred_var[, 2],na.rm = TRUE))
+
+
+cat('El valor esperado del modelo X3:', mean(pred_mean[, 3],na.rm = TRUE))
+cat('La varianza del modelo X3:', mean(pred_var[, 3],na.rm = TRUE))
+
+cat('El valor esperado del modelo X4:', mean(pred_mean[, 4],na.rm = TRUE))
+cat('La varianza del modelo X4:', mean(pred_var[, 4],na.rm = TRUE))
+
+
+cat('El valor esperado del modelo X5:', mean(pred_mean[, 5],na.rm = TRUE))
+cat('La varianza del modelo X5:', mean(pred_var[, 5],na.rm = TRUE))
+```
+
+
 **3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
 
 **4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
@@ -142,3 +163,10 @@ oneStepAhead <- function(X_past, modelos) {
 ```{r}
 oneStepAhead( datos[, assets],modelos)
 ```
+
+# Utilidad Media-Varianza
+
+**1. Obtener αt para t = T +1,...,T +r optimizando UMV. Elegir γ y estimar Σt tomando en cuenta que evaluara el rendimiento total en un periodo de prueba. Se permite tomar posiciones cortas**
+
+**2. Repetir pero ahora prohibiendo posiciones cortas.**
+
