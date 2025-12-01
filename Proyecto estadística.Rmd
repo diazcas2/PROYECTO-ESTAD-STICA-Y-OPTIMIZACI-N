@@ -61,7 +61,6 @@ for (asset in assets) {
   print(mod)
 }
 
-names(modelos) <- paste0("Modelo", seq_along(modelos))
 ```
 
 
