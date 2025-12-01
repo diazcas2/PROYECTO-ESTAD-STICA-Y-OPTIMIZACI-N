@@ -27,13 +27,6 @@ datos <- read_csv("stock_returns_train.csv")
 # Predicción de rendimientos
 **1. Obten un modelo pronósticos para Xi tXi 0,...,Xt − 1i para i = 1,2,...,5. Utilizando los datos Xtrain como consideres apropiado.**
 
-**2. Obten tanto el valor esperado del pronóstico E[Xi tXi 0,...,Xt − 1i] como la varianza V [Xi tXi 0,...,Xt − 1i].**
-
-
-**3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
-
-**4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
-
 1)
 ```{r}
 # Seleccionar 5 primeras columnas numéricas
@@ -64,8 +57,61 @@ for (asset in assets) {
 ```
 
 
-4) Vemos conveniente la realización de la función oneStepAhead, para responder al segundo apartado.
+**2. Obten tanto el valor esperado del pronóstico E[Xi tXi 0,...,Xt − 1i] como la varianza V [Xi tXi 0,...,Xt − 1i].**
 
+```{r}
+library(ggplot2)
+
+for (asset in assets) {
+  
+  # Creamos data.frame para la predicción
+  df_pred <- data.frame(
+    Tiempo = 1:r,
+    ValorEsperado = pred_mean[, asset],
+    Varianza = pred_var[, asset]
+  )
+  df_pred$SD <- sqrt(df_pred$Varianza)
+  
+  # Creamos data.frame para la serie original (Xtrain + Xtest)
+  serie_original <- c(Xtrain[[asset]], Xtest[[asset]])
+  df_orig <- data.frame(
+    Tiempo = 1:length(serie_original),
+    Valor = serie_original
+  )
+  
+  p <- ggplot() +
+    # Serie original en rojo
+    geom_line(data = df_orig, aes(x = Tiempo, y = Valor, color = "Serie original"), size = 1) +
+    # Banda de incertidumbre
+    geom_ribbon(data = df_pred, aes(x = Tiempo, ymin = ValorEsperado - SD, ymax = ValorEsperado + SD, fill = "Incertidumbre ±1 SD"), alpha = 0.3) +
+    # Línea de predicción
+    geom_line(data = df_pred, aes(x = Tiempo, y = ValorEsperado, color = "Valor esperado"), size = 1) +
+    scale_color_manual(name = "", values = c("Serie original" = "red", "Valor esperado" = "blue")) +
+    scale_fill_manual(name = "", values = c("Incertidumbre ±1 SD" = "lightblue")) +
+    labs(title = paste("Pronóstico one-step-ahead vs serie original:", asset),
+         x = "Tiempo", y = "Valor") +
+    theme_minimal()
+  
+  print(p)
+}
+
+```
+
+Recordemos que el Modelo 1 es un ARIMA(0,0,0) y nos llama la atención el resultado obtenido. Por lo que decidimos comprobar su autocorrelación. Veámoslo:
+```{r}
+acf(datos$X1)
+```
+Por otro lado: 
+```{r}
+mean(pred_mean[, 1],na.rm = TRUE)
+mean(pred_var[, 1],na.rm = TRUE)
+```
+
+Por lo que se demuestra que el modelo 1 es ruido blanco, por tener media 0 y varianza finita.
+
+**3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
+
+**4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
 
 ```{r}
 oneStepAhead <- function(X_past, modelos) {
@@ -96,4 +142,3 @@ oneStepAhead <- function(X_past, modelos) {
 ```{r}
 oneStepAhead( datos[, assets],modelos)
 ```
-
