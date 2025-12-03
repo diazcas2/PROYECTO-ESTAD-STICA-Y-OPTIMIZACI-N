@@ -114,6 +114,63 @@ cat('El valor esperado del modelo X5:', mean(mod_mv$mean[5],na.rm = TRUE))
 cat('La varianza del modelo X5:', mean(mod_mv$var[5],na.rm = TRUE))
 ```
 
+Por otro lado, para que al incorporar los datos reales podamos realizar todas las predicciones mediante el enfoque one step ahead, vamos a crear una función que se actualice progresivamente a medida que se dispone de nueva información, incorporando los valores reales que inicialmente no conocemos.
+
+```{r}
+oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
+  
+  # lista donde guardamos los pronósticos
+  preds <- vector("list", k)
+  
+  for (i in 1:k) {
+    
+    # 1. pronóstico one-step-ahead
+    pred <- oneStepAhead(X_past, modelos)
+    
+    # guardar predicción
+    preds[[i]] <- pred$mean
+    
+    # 2. añadir la observación real siguiente (una fila)
+    # X_reales debe ser un data frame con 5 columnas
+    X_past <- rbind(X_past, X_reales[i, ])
+  }
+  
+  # devolver matriz k x 5 de predicciones
+  preds_matrix <- do.call(rbind, preds)
+  rownames(preds_matrix) <- paste0("t+", 1:k)
+  
+  return(preds_matrix)
+}
+
+```
+
+Comprobación de la función usando $X_{TRAIN}$ y $X_{TEST}$:
+
+```{r}
+N <- nrow(datos)
+prop_test <- 0.2
+
+# número de datos para test
+r <- round(N * prop_test)
+
+# número de datos para train
+T_train <- N - r
+
+X_train <- datos[1:T_train, ]
+X_test <- datos[(T_train + 1):N, ]
+
+cat("Tamaño X_train:", nrow(X_train), "\n")
+cat("Tamaño X_test:", nrow(X_test), "\n")
+
+```
+
+```{r}
+oneStepAhead_mod(X_train,X_test,modelos,k=24)
+```
+
+
+
+
 # Utilidad Media-Varianza
 
 **1. Obtener αt para t = T +1,...,T +r optimizando UMV. Elegir γ y estimar Σt tomando en cuenta que evaluara el rendimiento total en un periodo de prueba. Se permite tomar posiciones cortas**
@@ -201,4 +258,9 @@ print(s)
 sum(s)
 ```
 
+```{r}
+sin_posiciones_cortas<-function(){
+  
+}
+```
 
