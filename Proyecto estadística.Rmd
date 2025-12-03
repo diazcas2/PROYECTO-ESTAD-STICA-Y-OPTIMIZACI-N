@@ -131,7 +131,6 @@ oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
     
     # guardar predicción
     preds[[i]] <- pred$mean
-    means_list[[i]] <- pred$mean
     vars_list[[i]]  <- pred$var
     
     # 2. añadir la observación real siguiente (una fila)
@@ -142,13 +141,11 @@ oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
   # devolver matriz k x 5 de predicciones
   preds_matrix <- do.call(rbind, preds)
   rownames(preds_matrix) <- paste0("t+", 1:k)
-  means_matrix <- do.call(rbind, means_list)
   vars_matrix  <- do.call(rbind, vars_list)
-   rownames(means_matrix) <- paste0("t+", 1:k)
   rownames(vars_matrix)  <- paste0("t+", 1:k)
   
-  return(list(preds_matrix,means = means_matrix,
-    vars  = vars_matrix))
+  return(list(mean=preds_matrix,
+    var  = vars_matrix))
 }
 
 ```
@@ -174,11 +171,9 @@ cat("Tamaño X_test:", nrow(X_test), "\n")
 ```
 
 ```{r}
-oneStepAhead_mod(X_train,X_test,modelos,k=24)
+mod_mod<-oneStepAhead_mod(X_train,X_test,modelos,k=24)
+mod_mod
 ```
-
-
-
 
 # Utilidad Media-Varianza
 
@@ -187,15 +182,33 @@ oneStepAhead_mod(X_train,X_test,modelos,k=24)
 **2. Repetir pero ahora prohibiendo posiciones cortas.**
 
 ```{r}
-construccion_sigma_t<-function(var,datos){
-  diagonal_sigmas <- sqrt(var)
-  D <- diag(diagonal_sigmas)
-  R <- cor(datos)
+construccion_sigma_t <- function(X_past, X_reales, modelos, k) {
   
-  # Reconstruir la Matriz de Covarianzas Sigma_t
-  sigma_t <- D %*% R %*% D
-  return(sigma_t)
+  # 1. Obtener pronósticos y varianzas
+  mod_osa <- oneStepAhead_mod(X_past, X_reales, modelos, k)
+  vars_matrix <- mod_osa$var       # k x N
+  mu_matrix   <- mod_osa$mean      # k x N
+  
+  N <- ncol(vars_matrix)
+  Sigma_list <- vector("list", k)
+  
+  # Loop para cada paso
+  for (i in 1:k) {
+    
+    var_vector <- vars_matrix[i, ]           # fila i → varianzas predichas
+    diagonal_sigmas <- sqrt(as.numeric(var_vector))
+    D <- diag(diagonal_sigmas)               # matriz diagonal N×N
+    
+    # matriz de correlaciones histórica (usando todo X_past hasta ese punto)
+    R <- cor(rbind(X_past, X_reales[1:i, ]), use = "pairwise.complete.obs")
+    
+    # reconstruir Σ_t para el paso i
+    Sigma_list[[i]] <- D %*% R %*% D
+  }
+  
+  return(Sigma_list)  # lista de k matrices N×N
 }
+
 ```
 
 
@@ -222,49 +235,76 @@ UMV <- function(datos, alfat, gamma, mu, var_vector) {
 ```
 
 ```{r}
-posiciones_cortas <- function(mu, Sigma_t, gamma) {
-  # mu: vector de medias (mod_mv$mean)
-  # Sigma_t: matriz de covarianzas
-  # gamma: aversión al riesgo (>0)
+posiciones_cortas <- function(X_past, X_reales, modelos, k, gamma) {
   
-  n <- length(mu)
-  uno <- rep(1, n)
+  # 1. Pronósticos one-step-ahead (sin cambios, asumiendo que ya corrigiste $means por $mean)
+  mod_osa <- oneStepAhead_mod(X_past, X_reales, modelos, k)
+  mu_matrix  <- as.matrix(mod_osa$mean)  # k x N
+  var_matrix <- as.matrix(mod_osa$var)   # k x N
   
-  Sigma_inv <- solve(Sigma_t)
+  N <- ncol(mu_matrix)
+  uno <- matrix(1, nrow = 1, ncol = N)    # Vector de unos (1 x N)
   
-  # Escalares A y B
-  A <- as.numeric(t(uno) %*% Sigma_inv %*% uno)
-  B <- as.numeric(t(uno) %*% Sigma_inv %*% mu)
+  # 2. Matrices de covarianza para cada paso (sin cambios)
+  Sigma_list <- construccion_sigma_t(X_past, X_reales, modelos, k)  # lista de k matrices N x N
   
-  # Parte sin restricción
-  parte_mu <- (1 / gamma) * (Sigma_inv %*% mu)         # vector n×1
+  alphas <- vector("list", k)
   
-  # Lagrange λ como escalar
-  lambda <- (B - gamma) / (gamma * A)                  # escalar
+  for (i in 1:k) {
+    
+    mu <- matrix(mu_matrix[i, ], ncol = 1)      # vector mu (N x 1)
+    Sigma_t <- Sigma_list[[i]]                  # matriz Sigma (N x N)
+    Sigma_inv <- solve(Sigma_t)
+    
+    # Componentes A y B (sin cambios, son correctas para cualquier gamma)
+    A <- as.numeric(uno %*% Sigma_inv %*% t(uno))  # A = 1' * Sigma_inv * 1
+    B <- as.numeric(uno %*% Sigma_inv %*% mu)      # B = 1' * Sigma_inv * mu
+    
+    # --- CAMBIO CRÍTICO: Cálculo de lambda ---
+    # Calculamos el multiplicador de Lagrange original (lambda_star), 
+    # que es función de gamma: lambda* = (B - gamma) / A
+    lambda_star <- (B - gamma) / A 
+    
+    # 1. Parte por rendimiento/riesgo
+    # (1/gamma) * Sigma_inv * mu
+    parte_mu <- (1/gamma) * (Sigma_inv %*% mu)
+    
+    # 2. Parte de la restricción (ajustada por gamma)
+    # (lambda*/gamma) * Sigma_inv * 1
+    lambda_factor <- lambda_star / gamma # Factor que acompaña a Sigma_inv * 1
+    parte_restriccion <- Sigma_inv %*% t(uno) * lambda_factor
+    
+    # La posición óptima (alpha) es la resta de las dos partes:
+    # alpha = (1/gamma) * Sigma_inv * mu - (lambda*/gamma) * Sigma_inv * 1
+    alpha <- parte_mu - parte_restriccion
+    alphas[[i]] <- as.numeric(alpha)
+  }
   
-  # Ajuste por restricción de suma 1
-  parte_restriccion <- lambda * (Sigma_inv %*% uno)    # vector n×1
+  # Resultado final (sin cambios)
+  alphas_matrix <- do.call(rbind, alphas)
+  rownames(alphas_matrix) <- paste0("t+", 1:k)
+  colnames(alphas_matrix) <- colnames(mu_matrix) # Usar nombres de activos
   
-  alpha_optimo <- parte_mu - parte_restriccion         # vector n×1
-  
-  return(as.numeric(alpha_optimo))
+  return(alphas_matrix)
 }
 
 ```
 
 ```{r}
-s<-posiciones_cortas(
-  mu = mod_mv$mean,
-  Sigma_t = construccion_sigma_t(mod_mv$var,datos),
-  gamma = 5
+# Supongamos que ya tienes X_train, X_test y modelos ajustados
+alphas_optimos <- posiciones_cortas(
+  X_past = X_train,
+  X_reales = X_test,
+  modelos = modelos,
+  k = 5,       # número de pasos a pronosticar
+  gamma = 5    # aversión al riesgo
 )
 
-names(s)<-paste0('alfa',seq(1,5))
-cat("Los alfa óptimos para cada modelo son:\n")
-print(s)
+# Mostrar resultados
+print(alphas_optimos)
 
-#Lo comprobamos:
-sum(s)
+suma_filas <- rowSums(alphas_optimos)
+print(suma_filas)
 ```
 
 ```{r}
