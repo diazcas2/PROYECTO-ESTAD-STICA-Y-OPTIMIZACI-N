@@ -189,7 +189,7 @@ posiciones_cortas <- function(mu, sigma_t, gamma) {
 ```{r}
 posiciones_cortas(
   mu = mod_mv$mean,
-  sigma_t = sigma_t(mod_mv$var,datos),
+  sigma_t = construccion_sigma_t(mod_mv$var,datos),
   gamma = 5
 )
 ```
