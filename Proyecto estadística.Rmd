@@ -121,16 +121,24 @@ cat('La varianza del modelo X5:', mean(mod_mv$var[5],na.rm = TRUE))
 **2. Repetir pero ahora prohibiendo posiciones cortas.**
 
 ```{r}
-UMV <- function(datos, alfat, gamma, mu, var_vector) {
-  
-  # 1. ESTABLECER LA MATRIZ DE COVARIANZAS (Sigma_t = D R D)
-  diagonal_sigmas <- sqrt(var_vector)
+construccion_sigma_t<-function(var,datos){
+  diagonal_sigmas <- sqrt(var)
   D <- diag(diagonal_sigmas)
   R <- cor(datos)
   
   # Reconstruir la Matriz de Covarianzas Sigma_t
   sigma_t <- D %*% R %*% D
-  
+  return(sigma_t)
+}
+```
+
+
+```{r}
+#Tenemos que fijar gamma, que es la aversión al riesgo. 
+# Valores más altos implican mayor aversión al riesgo (no quieres arriesgar tanto)
+
+UMV <- function(datos, alfat, gamma, mu, var_vector) {
+  construccion_sigma_t<-sigma_t(var_vector,datos)
   
   # 2. CALCULAR EL RENDIMIENTO ESPERADO DEL PORTAFOLIO (E[Rp])
   E_Rp <- t(alfat) %*% mu
@@ -145,6 +153,45 @@ UMV <- function(datos, alfat, gamma, mu, var_vector) {
   
   return(as.numeric(U))
 }
+```
+
+```{r}
+posiciones_cortas <- function(mu, sigma_t, gamma) {
+  
+  # Inversa de Sigma
+  sigma_t_inv <- solve(sigma_t) 
+  
+  # Vector de unos
+  n <- length(mu) 
+  vectorde1 <- matrix(1, n, 1)
+  
+  # 1. Constantes escalares
+  A <- t(vectorde1) %*% sigma_t_inv %*% vectorde1
+  B <- t(vectorde1) %*% sigma_t_inv %*% mu
+  
+  # 2. Parte sin restricción
+  parte_mu <- (1 / gamma) * (sigma_t_inv %*% mu)
+  
+  # 3. Lagrange
+  lambda <- (B - gamma) / (gamma * A)
+  
+  # 4. Ajuste por restricción de suma 1
+  parte_restriccion <- lambda * (sigma_t_inv %*% vectorde1)
+  
+  # 5. Solución final
+  alpha_optimo <- parte_mu - parte_restriccion
+  
+  return(as.numeric(alpha_optimo)) 
+}
 
 ```
+
+```{r}
+posiciones_cortas(
+  mu = mod_mv$mean,
+  sigma_t = sigma_t(mod_mv$var,datos),
+  gamma = 5
+)
+```
+
 
