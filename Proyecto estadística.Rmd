@@ -138,7 +138,7 @@ construccion_sigma_t<-function(var,datos){
 # Valores más altos implican mayor aversión al riesgo (no quieres arriesgar tanto)
 
 UMV <- function(datos, alfat, gamma, mu, var_vector) {
-  construccion_sigma_t<-sigma_t(var_vector,datos)
+  sigma_t<-construccion_1sigma_t(var_vector,datos)
   
   # 2. CALCULAR EL RENDIMIENTO ESPERADO DEL PORTAFOLIO (E[Rp])
   E_Rp <- t(alfat) %*% mu
@@ -156,42 +156,49 @@ UMV <- function(datos, alfat, gamma, mu, var_vector) {
 ```
 
 ```{r}
-posiciones_cortas <- function(mu, sigma_t, gamma) {
+posiciones_cortas <- function(mu, Sigma_t, gamma) {
+  # mu: vector de medias (mod_mv$mean)
+  # Sigma_t: matriz de covarianzas
+  # gamma: aversión al riesgo (>0)
   
-  # Inversa de Sigma
-  sigma_t_inv <- solve(sigma_t) 
+  n <- length(mu)
+  uno <- rep(1, n)
   
-  # Vector de unos
-  n <- length(mu) 
-  vectorde1 <- matrix(1, n, 1)
+  Sigma_inv <- solve(Sigma_t)
   
-  # 1. Constantes escalares
-  A <- t(vectorde1) %*% sigma_t_inv %*% vectorde1
-  B <- t(vectorde1) %*% sigma_t_inv %*% mu
+  # Escalares A y B
+  A <- as.numeric(t(uno) %*% Sigma_inv %*% uno)
+  B <- as.numeric(t(uno) %*% Sigma_inv %*% mu)
   
-  # 2. Parte sin restricción
-  parte_mu <- (1 / gamma) * (sigma_t_inv %*% mu)
+  # Parte sin restricción
+  parte_mu <- (1 / gamma) * (Sigma_inv %*% mu)         # vector n×1
   
-  # 3. Lagrange
-  lambda <- (B - gamma) / (gamma * A)
+  # Lagrange λ como escalar
+  lambda <- (B - gamma) / (gamma * A)                  # escalar
   
-  # 4. Ajuste por restricción de suma 1
-  parte_restriccion <- lambda * (sigma_t_inv %*% vectorde1)
+  # Ajuste por restricción de suma 1
+  parte_restriccion <- lambda * (Sigma_inv %*% uno)    # vector n×1
   
-  # 5. Solución final
-  alpha_optimo <- parte_mu - parte_restriccion
+  alpha_optimo <- parte_mu - parte_restriccion         # vector n×1
   
-  return(as.numeric(alpha_optimo)) 
+  return(as.numeric(alpha_optimo))
 }
 
 ```
 
 ```{r}
-posiciones_cortas(
+s<-posiciones_cortas(
   mu = mod_mv$mean,
-  sigma_t = construccion_sigma_t(mod_mv$var,datos),
+  Sigma_t = construccion_sigma_t(mod_mv$var,datos),
   gamma = 5
 )
+
+names(s)<-paste0('alfa',seq(1,5))
+cat("Los alfa óptimos para cada modelo son:\n")
+print(s)
+
+#Lo comprobamos:
+sum(s)
 ```
 
 
