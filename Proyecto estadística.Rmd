@@ -26,6 +26,11 @@ datos <- read_csv("stock_returns_train.csv")
 
 # 2. Predicción de rendimientos
 **1. Obten un modelo pronósticos para Xi tXi 0,...,Xt − 1i para i = 1,2,...,5. Utilizando los datos Xtrain como consideres apropiado.**
+**2. Obten tanto el valor esperado del pronóstico E[Xi tXi 0,...,Xt − 1i] como la varianza V [Xi tXi 0,...,Xt − 1i].**
+
+**3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
+
+**4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
 
 1)
 ```{r}
@@ -56,84 +61,6 @@ for (asset in assets) {
 
 ```
 
-
-**2. Obten tanto el valor esperado del pronóstico E[Xi tXi 0,...,Xt − 1i] como la varianza V [Xi tXi 0,...,Xt − 1i].**
-
-```{r}
-library(ggplot2)
-
-for (asset in assets) {
-  
-  # Creamos data.frame para la predicción
-  df_pred <- data.frame(
-    Tiempo = 1:r,
-    ValorEsperado = pred_mean[, asset],
-    Varianza = pred_var[, asset]
-  )
-  df_pred$SD <- sqrt(df_pred$Varianza)
-  
-  # Creamos data.frame para la serie original (Xtrain + Xtest)
-  serie_original <- c(Xtrain[[asset]], Xtest[[asset]])
-  df_orig <- data.frame(
-    Tiempo = 1:length(serie_original),
-    Valor = serie_original
-  )
-  
-  p <- ggplot() +
-    # Serie original en rojo
-    geom_line(data = df_orig, aes(x = Tiempo, y = Valor, color = "Serie original"), size = 1) +
-    # Banda de incertidumbre
-    geom_ribbon(data = df_pred, aes(x = Tiempo, ymin = ValorEsperado - SD, ymax = ValorEsperado + SD, fill = "Incertidumbre ±1 SD"), alpha = 0.3) +
-    # Línea de predicción
-    geom_line(data = df_pred, aes(x = Tiempo, y = ValorEsperado, color = "Valor esperado"), size = 1) +
-    scale_color_manual(name = "", values = c("Serie original" = "red", "Valor esperado" = "blue")) +
-    scale_fill_manual(name = "", values = c("Incertidumbre ±1 SD" = "lightblue")) +
-    labs(title = paste("Pronóstico one-step-ahead vs serie original:", asset),
-         x = "Tiempo", y = "Valor") +
-    theme_minimal()
-  
-  print(p)
-}
-
-```
-
-Recordemos que el Modelo 1 es un ARIMA(0,0,0) y nos llama la atención el resultado obtenido. Por lo que decidimos comprobar su autocorrelación. Veámoslo:
-```{r}
-acf(datos$X1)
-```
-Por otro lado: 
-```{r}
-mean(pred_mean[, 1],na.rm = TRUE)
-mean(pred_var[, 1],na.rm = TRUE)
-```
-
-Por lo que se demuestra que el modelo 1 es ruido blanco, por tener media 0 y varianza finita.
-
-En resumen: 
-```{r}
-cat('El valor esperado del modelo X1:', mean(pred_mean[, 1],na.rm = TRUE))
-cat('La varianza del modelo X1:', mean(pred_var[, 1],na.rm = TRUE))
-
-cat('El valor esperado del modelo X2:', mean(pred_mean[, 2],na.rm = TRUE))
-cat('La varianza del modelo X2:', mean(pred_var[, 2],na.rm = TRUE))
-
-
-cat('El valor esperado del modelo X3:', mean(pred_mean[, 3],na.rm = TRUE))
-cat('La varianza del modelo X3:', mean(pred_var[, 3],na.rm = TRUE))
-
-cat('El valor esperado del modelo X4:', mean(pred_mean[, 4],na.rm = TRUE))
-cat('La varianza del modelo X4:', mean(pred_var[, 4],na.rm = TRUE))
-
-
-cat('El valor esperado del modelo X5:', mean(pred_mean[, 5],na.rm = TRUE))
-cat('La varianza del modelo X5:', mean(pred_var[, 5],na.rm = TRUE))
-```
-
-
-**3. en cada momento t = T +1,...,T +r podras utilizar todo el pasado de la serie como 1,...,t − 1 de la forma que consideres adecuado para realizar tu pronostico.**
-
-**4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
-
 ```{r}
 oneStepAhead <- function(X_past, modelos) {
   mu  <- numeric(length(modelos))
@@ -161,7 +88,30 @@ oneStepAhead <- function(X_past, modelos) {
 ```
 
 ```{r}
-oneStepAhead( datos[, assets],modelos)
+mod_mv<-oneStepAhead( datos[, assets],modelos)
+mod_mv
+```
+
+Recordemos que el Modelo 1 es un ARIMA(0,0,0) y nos llama la atención el resultado obtenido por tener media 0 y varianza finita, lo que concuerda con el ruido blanco, .
+
+En resumen: 
+```{r}
+cat('El valor esperado del modelo X1:', mean(mod_mv$mean[1],na.rm = TRUE))
+cat('La varianza del modelo X1:', mean(mod_mv$var[1],na.rm = TRUE))
+
+cat('El valor esperado del modelo X2:', mean(mod_mv$mean[2],na.rm = TRUE))
+cat('La varianza del modelo X2:', mean(mod_mv$var[2],na.rm = TRUE))
+
+
+cat('El valor esperado del modelo X3:', mean(mod_mv$mean[3],na.rm = TRUE))
+cat('La varianza del modelo X3:', mean(mod_mv$var[3],na.rm = TRUE))
+
+cat('El valor esperado del modelo X4:', mean(mod_mv$mean[4],na.rm = TRUE))
+cat('La varianza del modelo X4:', mean(mod_mv$var[4],na.rm = TRUE))
+
+
+cat('El valor esperado del modelo X5:', mean(mod_mv$mean[5],na.rm = TRUE))
+cat('La varianza del modelo X5:', mean(mod_mv$var[5],na.rm = TRUE))
 ```
 
 # Utilidad Media-Varianza
@@ -169,4 +119,14 @@ oneStepAhead( datos[, assets],modelos)
 **1. Obtener αt para t = T +1,...,T +r optimizando UMV. Elegir γ y estimar Σt tomando en cuenta que evaluara el rendimiento total en un periodo de prueba. Se permite tomar posiciones cortas**
 
 **2. Repetir pero ahora prohibiendo posiciones cortas.**
+
+```{r}
+diagonal<-sqrt(mod_mv$var)
+D<-diag(diagonal)
+
+R_historica <- cor(datos)
+R_historica
+
+
+```
 
