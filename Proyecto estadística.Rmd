@@ -121,6 +121,8 @@ oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
   
   # lista donde guardamos los pronósticos
   preds <- vector("list", k)
+  means_list <- vector("list", k)
+  vars_list  <- vector("list", k)
   
   for (i in 1:k) {
     
@@ -129,6 +131,8 @@ oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
     
     # guardar predicción
     preds[[i]] <- pred$mean
+    means_list[[i]] <- pred$mean
+    vars_list[[i]]  <- pred$var
     
     # 2. añadir la observación real siguiente (una fila)
     # X_reales debe ser un data frame con 5 columnas
@@ -138,8 +142,13 @@ oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
   # devolver matriz k x 5 de predicciones
   preds_matrix <- do.call(rbind, preds)
   rownames(preds_matrix) <- paste0("t+", 1:k)
+  means_matrix <- do.call(rbind, means_list)
+  vars_matrix  <- do.call(rbind, vars_list)
+   rownames(means_matrix) <- paste0("t+", 1:k)
+  rownames(vars_matrix)  <- paste0("t+", 1:k)
   
-  return(preds_matrix)
+  return(list(preds_matrix,means = means_matrix,
+    vars  = vars_matrix))
 }
 
 ```
