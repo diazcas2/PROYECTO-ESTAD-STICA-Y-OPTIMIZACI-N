@@ -121,12 +121,30 @@ cat('La varianza del modelo X5:', mean(mod_mv$var[5],na.rm = TRUE))
 **2. Repetir pero ahora prohibiendo posiciones cortas.**
 
 ```{r}
-diagonal<-sqrt(mod_mv$var)
-D<-diag(diagonal)
-
-R_historica <- cor(datos)
-R_historica
-
+UMV <- function(datos, alfat, gamma, mu, var_vector) {
+  
+  # 1. ESTABLECER LA MATRIZ DE COVARIANZAS (Sigma_t = D R D)
+  diagonal_sigmas <- sqrt(var_vector)
+  D <- diag(diagonal_sigmas)
+  R <- cor(datos)
+  
+  # Reconstruir la Matriz de Covarianzas Sigma_t
+  sigma_t <- D %*% R %*% D
+  
+  
+  # 2. CALCULAR EL RENDIMIENTO ESPERADO DEL PORTAFOLIO (E[Rp])
+  E_Rp <- t(alfat) %*% mu
+  
+  
+  # 3. CALCULAR LA VARIANZA DEL PORTAFOLIO (Var[Rp])
+  Var_Rp <- t(alfat) %*% sigma_t %*% alfat
+  
+  
+  # 4. CALCULAR LA UTILIDAD ESPERADA (U)
+  U <- E_Rp - (1/2) * gamma * Var_Rp
+  
+  return(as.numeric(U))
+}
 
 ```
 
