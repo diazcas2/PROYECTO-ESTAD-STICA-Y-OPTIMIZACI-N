@@ -33,117 +33,46 @@ datos <- read_csv("stock_returns_train.csv")
 **4. No veras el periodo de valuación t = T+1,...,T+r hasta después de entregar el proyecto por lo que debes generar un funci´on oneStepAhead(X1:t,Mθ))... return ˆ Xt+1). Es decir que toma el pasado de las 5 series, los modelos de predicción de las 5 series y que regresa un el pronostico a un paso (valor esperado y varianza) de los 5 activos**
 
 1)
-```{r}
-# Seleccionar 5 primeras columnas numéricas
-num_cols <- names(datos)[sapply(datos, is.numeric)]
-assets   <- num_cols[1:5]
-assets
-```
 
 ```{r}
-# Ajustar modelo ARIMA para cada activo usando TODO el X_train
-modelos <- list()
-
-for (asset in assets) {
-  serie <- na.omit(datos[[asset]])
+oneStepAhead <- function(X_train, X_test_past) {
+  # Seleccionar primeras 5 columnas numéricas
+  num_cols <- names(X_train)[sapply(X_train, is.numeric)]
+  assets   <- num_cols[1:5]
   
-  # Transformamos la serie a una serie temporal
-  serie_ts <- ts(serie)
+  mu_hat_list <- numeric(length(assets))
+  se_hat_list <- numeric(length(assets))
+  names(mu_hat_list) <- names(se_hat_list) <- assets
   
-  #Aplicamos la función autoarima
-  mod <- auto.arima(serie_ts, stepwise = FALSE,approximation = FALSE)
-  
-  modelos[[asset]] <- mod
-}
-
-```
-
-```{r}
-oneStepAhead <- function(X_past, modelos) {
-  mu  <- numeric(length(modelos))
-  sig2 <- numeric(length(modelos))
-  
-  names(mu)   <- names(modelos)
-  names(sig2) <- names(modelos)
-  
-  for (asset in names(modelos)) {
-    serie <- as.numeric(na.omit(X_past[[asset]]))
-    serie_ts <- ts(serie)
+  for (asset in assets) {
+    x_train <- as.numeric(na.omit(X_train[[asset]]))
+    x_test_past_asset <- as.numeric(na.omit(X_test_past[[asset]]))
     
-    # Actualizamos usando TODO el pasado disponible
-    mod_upd <- Arima(serie_ts, model = modelos[[asset]])
+    # 1. Ajustar modelo ARIMA sobre el histórico de entrenamiento
+    mod <- auto.arima(x_train, stepwise = FALSE, approximation = FALSE)
     
-    fc <- forecast(mod_upd, h = 1)
+    # 2. Actualizar el modelo con todo el histórico disponible
+    x_past <- c(x_train, x_test_past_asset)
+    fit_upd <- Arima(x_past, model = mod)
     
-    mu[asset]   <- as.numeric(fc$mean[1])           # E[X_{t+1} | pasado]
-    sig2[asset] <- as.numeric(mod_upd[["sigma2"]]) # Varianza del modelo
+    # 3. Forecast one-step-ahead
+    fc <- forecast(fit_upd, h = 1)
+    mu_hat <- as.numeric(fc$mean[1])
+    
+    # 4. Estimar error estándar a partir del intervalo del 80%
+    z80 <- qnorm(0.8)
+    se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
+    se_from_lo <- (fc$mean[1] - fc$lower[,"80%"][1]) / z80
+    se_hat <- as.numeric(pmax(se_from_up, se_from_lo))
+    
+    # Guardar resultados
+    mu_hat_list[asset] <- mu_hat
+    se_hat_list[asset] <- se_hat
   }
   
-  return(list(mean = mu, var = sig2))
+  return(list(mu_hat = mu_hat_list, se_hat = se_hat_list))
 }
 
-```
-
-```{r}
-mod_mv<-oneStepAhead( datos[, assets],modelos)
-mod_mv
-```
-
-Recordemos que el Modelo 1 es un ARIMA(0,0,0) y nos llama la atención el resultado obtenido por tener media 0 y varianza finita, lo que concuerda con el ruido blanco, .
-
-En resumen: 
-```{r}
-cat('El valor esperado del modelo X1:', mean(mod_mv$mean[1],na.rm = TRUE))
-cat('La varianza del modelo X1:', mean(mod_mv$var[1],na.rm = TRUE))
-
-cat('El valor esperado del modelo X2:', mean(mod_mv$mean[2],na.rm = TRUE))
-cat('La varianza del modelo X2:', mean(mod_mv$var[2],na.rm = TRUE))
-
-
-cat('El valor esperado del modelo X3:', mean(mod_mv$mean[3],na.rm = TRUE))
-cat('La varianza del modelo X3:', mean(mod_mv$var[3],na.rm = TRUE))
-
-cat('El valor esperado del modelo X4:', mean(mod_mv$mean[4],na.rm = TRUE))
-cat('La varianza del modelo X4:', mean(mod_mv$var[4],na.rm = TRUE))
-
-
-cat('El valor esperado del modelo X5:', mean(mod_mv$mean[5],na.rm = TRUE))
-cat('La varianza del modelo X5:', mean(mod_mv$var[5],na.rm = TRUE))
-```
-
-Por otro lado, para que al incorporar los datos reales podamos realizar todas las predicciones mediante el enfoque one step ahead, vamos a crear una función que se actualice progresivamente a medida que se dispone de nueva información, incorporando los valores reales que inicialmente no conocemos.
-
-```{r}
-oneStepAhead_mod <- function(X_past, X_reales, modelos, k) {
-  
-  # lista donde guardamos los pronósticos
-  preds <- vector("list", k)
-  means_list <- vector("list", k)
-  vars_list  <- vector("list", k)
-  
-  for (i in 1:k) {
-    
-    # 1. pronóstico one-step-ahead
-    pred <- oneStepAhead(X_past, modelos)
-    
-    # guardar predicción
-    preds[[i]] <- pred$mean
-    vars_list[[i]]  <- pred$var
-    
-    # 2. añadir la observación real siguiente (una fila)
-    # X_reales debe ser un data frame con 5 columnas
-    X_past <- rbind(X_past, X_reales[i, ])
-  }
-  
-  # devolver matriz k x 5 de predicciones
-  preds_matrix <- do.call(rbind, preds)
-  rownames(preds_matrix) <- paste0("t+", 1:k)
-  vars_matrix  <- do.call(rbind, vars_list)
-  rownames(vars_matrix)  <- paste0("t+", 1:k)
-  
-  return(list(mean=preds_matrix,
-    var  = vars_matrix))
-}
 
 ```
 
@@ -168,7 +97,7 @@ cat("Tamaño X_test:", nrow(X_test), "\n")
 ```
 
 ```{r}
-mod_mod<-oneStepAhead_mod(X_train,X_test,modelos,k=24)
+mod_mod<-oneStepAhead(X_train,X_test)
 mod_mod
 ```
 
@@ -179,33 +108,35 @@ mod_mod
 **2. Repetir pero ahora prohibiendo posiciones cortas.**
 
 ```{r}
-construccion_sigma_t <- function(X_past, X_reales, modelos, k) {
-  
-  # 1. Obtener pronósticos y varianzas
-  mod_osa <- oneStepAhead_mod(X_past, X_reales, modelos, k)
-  vars_matrix <- mod_osa$var       # k x N
-  mu_matrix   <- mod_osa$mean      # k x N
-  
-  N <- ncol(vars_matrix)
+construccion_sigma_t <- function(X_past, X_reales) {
+  N <- ncol(X_past)
+  k <- nrow(X_reales)           # número de pasos a predecir
   Sigma_list <- vector("list", k)
   
   # Loop para cada paso
   for (i in 1:k) {
+    # 1. Seleccionar la fila actual de X_reales
+    X_test_past <- X_reales[i, , drop = FALSE]
     
-    var_vector <- vars_matrix[i, ]           # fila i → varianzas predichas
-    diagonal_sigmas <- sqrt(as.numeric(var_vector))
-    D <- diag(diagonal_sigmas)               # matriz diagonal N×N
+    # 2. Obtener pronóstico y error estándar usando oneStepAhead_et
+    pred <- oneStepAhead(X_past, X_test_past)
     
-    # matriz de correlaciones histórica (usando todo X_past hasta ese punto)
+    # 3. Construir matriz diagonal de desviaciones estándar
+    diagonal_sigmas <- pred$se_hat
+    D <- diag(diagonal_sigmas)
+    
+    # 4. Matriz de correlaciones histórica usando todo el pasado hasta este punto
     R <- cor(rbind(X_past, X_reales[1:i, ]), use = "pairwise.complete.obs")
     
-    # reconstruir Σ_t para el paso i
+    # 5. Reconstruir Σ_t para el paso i
     Sigma_list[[i]] <- D %*% R %*% D
+    
+    # 6. Actualizar X_past con la observación real de este paso
+    X_past <- rbind(X_past, X_test_past)
   }
   
-  return(Sigma_list)  # lista de k matrices N×N
+  return(Sigma_list)  # lista de matrices N×N, una por cada fila de X_reales
 }
-
 ```
 
 
@@ -232,58 +163,38 @@ UMV <- function(datos, alfat, gamma, mu, var_vector) {
 ```
 
 ```{r}
-posiciones_cortas <- function(X_past, X_reales, modelos, k, gamma) {
+
+posiciones_cortas <- function(X_past, X_reales, gamma) {
+  N <- ncol(X_past)
+  uno <- matrix(1, nrow = 1, ncol = N)
   
-  # 1. Pronósticos one-step-ahead (sin cambios, asumiendo que ya corrigiste $means por $mean)
-  mod_osa <- oneStepAhead_mod(X_past, X_reales, modelos, k)
-  mu_matrix  <- as.matrix(mod_osa$mean)  # k x N
-  var_matrix <- as.matrix(mod_osa$var)   # k x N
+  # Seleccionar la fila de X_reales para un solo paso
+  X_test_past <- X_reales[1, , drop = FALSE]
   
-  N <- ncol(mu_matrix)
-  uno <- matrix(1, nrow = 1, ncol = N)    # Vector de unos (1 x N)
+  # Pronóstico one-step-ahead
+  pred <- oneStepAhead(X_past, X_test_past)
+  mu <- matrix(pred$mean, ncol = 1)
   
-  # 2. Matrices de covarianza para cada paso (sin cambios)
-  Sigma_list <- construccion_sigma_t(X_past, X_reales, modelos, k)  # lista de k matrices N x N
+  # Matriz de covarianza
+  Sigma_list <- construccion_sigma_t(X_past, X_test_past)
+  Sigma_t <- Sigma_list[[1]]
+  Sigma_inv <- solve(Sigma_t)
   
-  alphas <- vector("list", k)
+  # Cálculo de alpha
+  A <- as.numeric(uno %*% Sigma_inv %*% t(uno))
+  B <- as.numeric(uno %*% Sigma_inv %*% mu)
+  lambda_star <- (B - gamma) / A
   
-  for (i in 1:k) {
-    
-    mu <- matrix(mu_matrix[i, ], ncol = 1)      # vector mu (N x 1)
-    Sigma_t <- Sigma_list[[i]]                  # matriz Sigma (N x N)
-    Sigma_inv <- solve(Sigma_t)
-    
-    # Componentes A y B (sin cambios, son correctas para cualquier gamma)
-    A <- as.numeric(uno %*% Sigma_inv %*% t(uno))  # A = 1' * Sigma_inv * 1
-    B <- as.numeric(uno %*% Sigma_inv %*% mu)      # B = 1' * Sigma_inv * mu
-    
-    # --- CAMBIO CRÍTICO: Cálculo de lambda ---
-    # Calculamos el multiplicador de Lagrange original (lambda_star), 
-    # que es función de gamma: lambda* = (B - gamma) / A
-    lambda_star <- (B - gamma) / A 
-    
-    # 1. Parte por rendimiento/riesgo
-    # (1/gamma) * Sigma_inv * mu
-    parte_mu <- (1/gamma) * (Sigma_inv %*% mu)
-    
-    # 2. Parte de la restricción (ajustada por gamma)
-    # (lambda*/gamma) * Sigma_inv * 1
-    lambda_factor <- lambda_star / gamma # Factor que acompaña a Sigma_inv * 1
-    parte_restriccion <- Sigma_inv %*% t(uno) * lambda_factor
-    
-    # La posición óptima (alpha) es la resta de las dos partes:
-    # alpha = (1/gamma) * Sigma_inv * mu - (lambda*/gamma) * Sigma_inv * 1
-    alpha <- parte_mu - parte_restriccion
-    alphas[[i]] <- as.numeric(alpha)
-  }
+  parte_mu <- (1 / gamma) * (Sigma_inv %*% mu)
+  parte_restriccion <- Sigma_inv %*% t(uno) * (lambda_star / gamma)
+  alpha <- parte_mu - parte_restriccion
   
-  # Resultado final (sin cambios)
-  alphas_matrix <- do.call(rbind, alphas)
-  rownames(alphas_matrix) <- paste0("t+", 1:k)
-  colnames(alphas_matrix) <- colnames(mu_matrix) # Usar nombres de activos
+  alpha_vec <- as.numeric(alpha)
+  names(alpha_vec) <- colnames(X_past)
   
-  return(alphas_matrix)
+  return(alpha_vec)
 }
+
 
 ```
 
@@ -292,57 +203,52 @@ posiciones_cortas <- function(X_past, X_reales, modelos, k, gamma) {
 alphas_optimos <- posiciones_cortas(
   X_past = X_train,
   X_reales = X_test,
-  modelos = modelos,
-  k = 5,       # número de pasos a pronosticar
   gamma = 5    # aversión al riesgo
 )
 
 # Mostrar resultados
 print(alphas_optimos)
+sum(alphas_optimos)
 
-suma_filas <- rowSums(alphas_optimos)
-print(suma_filas)
 ```
 
 ```{r}
 library(quadprog)
 
-sin_posiciones_cortas <- function(X_past, X_reales, modelos, k, gamma) {
+library(quadprog)
 
-  mod_osa <- oneStepAhead_mod(X_past, X_reales, modelos, k)
-  mu_matrix  <- as.matrix(mod_osa$mean)
-  Sigma_list <- construccion_sigma_t(X_past, X_reales, modelos, k)
+sin_posiciones_cortas <- function(X_past, X_reales, gamma) {
+  # Número de activos
+  N <- ncol(X_past)
   
-  N <- ncol(mu_matrix)
-  alphas <- vector("list", k)
+  # Seleccionar la fila actual de X_reales (solo un paso ahead)
+  X_test_past <- X_reales[1, , drop = FALSE]
   
-  for (i in 1:k) {
-    
-    mu <- mu_matrix[i, ]
-    Sigma_t <- Sigma_list[[i]]
-    
-    Dmat <- gamma * Sigma_t                
-    dvec <- mu                             
-    
-    Aeq <- matrix(1, nrow = N, ncol = 1)
-    G <- diag(N)
-    
-    Amat <- cbind(Aeq, G)   
-    bvec <- c(1, rep(0, N)) 
-    
-    sol <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = 1)
-    
-    alphas[[i]] <- sol$solution
-  }
+  # 1. Pronóstico one-step-ahead
+  pred <- oneStepAhead(X_past, X_test_past)
+  mu <- as.numeric(pred$mean)
   
-  alphas_matrix <- do.call(rbind, alphas)
-  rownames(alphas_matrix) <- paste0("t+", 1:k)
-  colnames(alphas_matrix) <- colnames(mu_matrix)
-
-  alphas_matrix <- round(alphas_matrix, 8)
-  alphas_matrix[alphas_matrix < 0] <- 0
-
-  return(alphas_matrix)
+  # 2. Matriz de covarianza
+  Sigma_list <- construccion_sigma_t(X_past, X_test_past)
+  Sigma_t <- Sigma_list[[1]]
+  
+  # 3. Definir parámetros para solve.QP
+  Dmat <- gamma * Sigma_t
+  dvec <- mu
+  Aeq <- matrix(1, nrow = N, ncol = 1)
+  G <- diag(N)
+  Amat <- cbind(Aeq, G)
+  bvec <- c(1, rep(0, N))
+  
+  # 4. Resolver problema de optimización cuadrática
+  sol <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = 1)
+  
+  # 5. Ajustes finales: redondear y eliminar negativos
+  alpha_vec <- round(sol$solution, 8)
+  alpha_vec[alpha_vec < 0] <- 0
+  names(alpha_vec) <- colnames(X_past)
+  
+  return(alpha_vec)
 }
 
 
@@ -353,13 +259,11 @@ sin_posiciones_cortas <- function(X_past, X_reales, modelos, k, gamma) {
 alphas_sin_cortos <- sin_posiciones_cortas(
   X_past = X_train,
   X_reales = X_test,
-  modelos = modelos,
-  k = 5,
   gamma = 5
 )
 
 print(alphas_sin_cortos)
-rowSums(alphas_sin_cortos)
+sum(alphas_sin_cortos)
 alphas_sin_cortos < 0
 
 ```
@@ -368,3 +272,5 @@ alphas_sin_cortos < 0
 # Log-utilidad
 
 **1. Obtener αt para t = T +1,...,T +r optimizando Ulog. Se permite tomar posiciones cortas y no enteras.**
+
+
