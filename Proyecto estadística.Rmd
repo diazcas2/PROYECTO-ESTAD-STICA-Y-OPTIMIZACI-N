@@ -54,9 +54,6 @@ for (asset in assets) {
   mod <- auto.arima(serie_ts, stepwise = FALSE,approximation = FALSE)
   
   modelos[[asset]] <- mod
-  
-  cat("\nModelo para", asset, ":\n")
-  print(mod)
 }
 
 ```
@@ -308,8 +305,66 @@ print(suma_filas)
 ```
 
 ```{r}
-sin_posiciones_cortas<-function(){
+library(quadprog)
+
+sin_posiciones_cortas <- function(X_past, X_reales, modelos, k, gamma) {
+
+  mod_osa <- oneStepAhead_mod(X_past, X_reales, modelos, k)
+  mu_matrix  <- as.matrix(mod_osa$mean)
+  Sigma_list <- construccion_sigma_t(X_past, X_reales, modelos, k)
   
+  N <- ncol(mu_matrix)
+  alphas <- vector("list", k)
+  
+  for (i in 1:k) {
+    
+    mu <- mu_matrix[i, ]
+    Sigma_t <- Sigma_list[[i]]
+    
+    Dmat <- gamma * Sigma_t                
+    dvec <- mu                             
+    
+    Aeq <- matrix(1, nrow = N, ncol = 1)
+    G <- diag(N)
+    
+    Amat <- cbind(Aeq, G)   
+    bvec <- c(1, rep(0, N)) 
+    
+    sol <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = 1)
+    
+    alphas[[i]] <- sol$solution
+  }
+  
+  alphas_matrix <- do.call(rbind, alphas)
+  rownames(alphas_matrix) <- paste0("t+", 1:k)
+  colnames(alphas_matrix) <- colnames(mu_matrix)
+
+  alphas_matrix <- round(alphas_matrix, 8)
+  alphas_matrix[alphas_matrix < 0] <- 0
+
+  return(alphas_matrix)
 }
+
+
 ```
 
+
+```{r}
+alphas_sin_cortos <- sin_posiciones_cortas(
+  X_past = X_train,
+  X_reales = X_test,
+  modelos = modelos,
+  k = 5,
+  gamma = 5
+)
+
+print(alphas_sin_cortos)
+rowSums(alphas_sin_cortos)
+alphas_sin_cortos < 0
+
+```
+
+
+# Log-utilidad
+
+**1. Obtener αt para t = T +1,...,T +r optimizando Ulog. Se permite tomar posiciones cortas y no enteras.**
