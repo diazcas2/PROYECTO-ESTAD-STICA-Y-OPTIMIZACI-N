@@ -207,81 +207,51 @@ alphas_sin_cortos < 0
 **1. Obtener αt para t = T +1,...,T +r optimizando Ulog. Se permite tomar posiciones cortas y no enteras.**
 
 ```{r}
-Ulog_neg <- function(alpha, mu, Sigma, gamma){
+getAlphaLog <- function(mu, Sigma, gamma){
+  # INPUT:
+  # mu: vector en R^5 con los rendimientos esperados
+  # Sigma: matriz de covarianza 5x5
+  # gamma: aversión al riesgo
   
-  alpha <- as.numeric(alpha)  # asegurar que es vector
-  Sigma <- as.matrix(Sigma)   # asegurar que es matriz
+  N <- length(mu)
+  penalty_weight <- 1e4   # penalización fuerte para asegurar suma=1
   
-  if(1 + sum(alpha * mu) <= 0){
-    return(1e6)
+  # Función objetivo penalizada
+  f_obj <- function(alpha){
+    alpha <- matrix(alpha, ncol = 1)
+    muTalpha <- as.numeric(t(alpha) %*% mu)
+    alphaTSigmaAlpha <- as.numeric(t(alpha) %*% Sigma %*% alpha)
+    
+    # Utilidad log aproximada (Taylor)
+    Ulog <- log(1 + muTalpha) - (gamma/2) * alphaTSigmaAlpha / ((1 + muTalpha)^2)
+    
+    # Penalización por violar la suma = 1
+    penalty <- penalty_weight * (sum(alpha) - 1)^2
+    
+    return(-(Ulog) + penalty)
   }
-  
-  term1 <- log(1 + sum(alpha * mu))
-  term2 <- (gamma / 2) * var_p / (1 + alpha_mu)^2
-  U <- term1 - term2
-  
-  return(-as.numeric(U))
-}
-
-```
-
-```{r}
-restriccion <- function(alpha){
-  return( (sum(alpha) - 1)^2 * 1e3 )  # penalización fuerte
-}
-
-```
-
-```{r}
-optimizar_log <- function(X_past, X_reales, gamma){
-  
-  # Solo usa el siguiente paso
-  X_test_past <- X_reales[1, , drop = FALSE]
-  
-  # Pronóstico
-  pred <- oneStepAhead(X_past, X_test_past)
-  mu <- as.numeric(pred$mu_hat)
-  
-  # Matriz de covarianza
-  Sigma_t <- construccion_sigma_t(X_past, X_test_past)[[1]]
-  Sigma_t <- as.matrix(Sigma_t)
-  if(length(dim(Sigma_t)) == 3) Sigma_t <- Sigma_t[1,,]  # corregir 3D a 2D
   
   # Inicialización: pesos iguales
-  N <- length(mu)
   alpha0 <- rep(1/N, N)
   
-  # Restricción sum(alpha)=1 ---> penalización
-  restriccion <- function(alpha){
-    return( (sum(alpha) - 1)^2 * 1e3 )
-  }
+  # Optimización sin límites (permitimos cortas)
+  sol <- optim(par = alpha0, fn = f_obj, method = "BFGS")
   
-  obj <- function(alpha){
-    Ulog_neg(alpha, mu, Sigma_t, gamma) + restriccion(alpha)
-  }
+  alpha <- sol$par
+  alpha <- round(alpha, 5)
   
-  sol <- optim(alpha0, obj, method = "BFGS", control = list(maxit = 1000))
+  # Renombramos
+  names(alpha) <- paste0("alpha_Log_", 1:N)
   
-  # Normalizar para corregir errores numéricos
-  alpha_opt <- sol$par / sum(sol$par)
-  names(alpha_opt) <- colnames(X_past)
-  
-  return(alpha_opt)
+  return(alpha)
 }
-
 
 ```
 
 
 ```{r}
-alpha_log <- optimizar_log(
-  X_past = X_train,
-  X_reales = X_test,
-  gamma = 5   # tu aversión al riesgo
-)
-
-alpha_log
-sum(alpha_log)  # debe ser ≈ 1
-
+beta<-getAlphaLog(mu,Sigma,gamma=6)
+print(beta)
+sum(beta)
 ```
 
