@@ -108,89 +108,43 @@ mod_mod
 **2. Repetir pero ahora prohibiendo posiciones cortas.**
 
 ```{r}
-construccion_sigma_t <- function(X_past, X_reales) {
-  N <- ncol(X_past)
-  k <- nrow(X_reales)           # número de pasos a predecir
-  Sigma_list <- vector("list", k)
+construccion_sigma_t <- function(sig, Xpast){
+  # 1. Matriz diagonal de desviaciones estándar
+  D <- diag(sig)
   
-  # Loop para cada paso
-  for (i in 1:k) {
-    # 1. Seleccionar la fila actual de X_reales
-    X_test_past <- X_reales[i, , drop = FALSE]
-    
-    # 2. Obtener pronóstico y error estándar usando oneStepAhead_et
-    pred <- oneStepAhead(X_past, X_test_past)
-    
-    # 3. Construir matriz diagonal de desviaciones estándar
-    diagonal_sigmas <- pred$se_hat
-    D <- diag(diagonal_sigmas)
-    
-    # 4. Matriz de correlaciones histórica usando todo el pasado hasta este punto
-    R <- cor(rbind(X_past, X_reales[1:i, ]), use = "pairwise.complete.obs")
-    
-    # 5. Reconstruir Σ_t para el paso i
-    Sigma_list[[i]] <- D %*% R %*% D
-    
-    # 6. Actualizar X_past con la observación real de este paso
-    X_past <- rbind(X_past, X_test_past)
-  }
+  # 2. Matriz de correlaciones históricas
+  R <- cor(Xpast, use = "pairwise.complete.obs")
   
-  return(Sigma_list)  # lista de matrices N×N, una por cada fila de X_reales
+  # 3. Construcción de la matriz de covarianza
+  Sigma <- D %*% R %*% D
+  
+  return(Sigma)
 }
 ```
 
 
 ```{r}
-#Tenemos que fijar gamma, que es la aversión al riesgo. 
-# Valores más altos implican mayor aversión al riesgo (no quieres arriesgar tanto)
-
-UMV <- function(datos, alfat, gamma, mu, var_vector) {
-  sigma_t<-construccion_1sigma_t(var_vector,datos)
-  
-  # 2. CALCULAR EL RENDIMIENTO ESPERADO DEL PORTAFOLIO (E[Rp])
-  E_Rp <- t(alfat) %*% mu
-  
-  
-  # 3. CALCULAR LA VARIANZA DEL PORTAFOLIO (Var[Rp])
-  Var_Rp <- t(alfat) %*% sigma_t %*% alfat
-  
-  
-  # 4. CALCULAR LA UTILIDAD ESPERADA (U)
-  U <- E_Rp - (1/2) * gamma * Var_Rp
-  
-  return(as.numeric(U))
-}
-```
-
-```{r}
-
-posiciones_cortas <- function(X_past, X_reales, gamma) {
-  N <- ncol(X_past)
+posiciones_cortas <- function(mu, Sigma, gamma){
+  N <- length(mu)
   uno <- matrix(1, nrow = 1, ncol = N)
+  mu <- matrix(mu, ncol = 1)
   
-  # Seleccionar la fila de X_reales para un solo paso
-  X_test_past <- X_reales[1, , drop = FALSE]
+  # Inversa de Sigma
+  Sigma_inv <- solve(Sigma)
   
-  # Pronóstico one-step-ahead
-  pred <- oneStepAhead(X_past, X_test_past)
-  mu <- matrix(pred$mean, ncol = 1)
-  
-  # Matriz de covarianza
-  Sigma_list <- construccion_sigma_t(X_past, X_test_past)
-  Sigma_t <- Sigma_list[[1]]
-  Sigma_inv <- solve(Sigma_t)
-  
-  # Cálculo de alpha
+  # Cálculo de lambda_star para la restricción sum(alpha)=1
   A <- as.numeric(uno %*% Sigma_inv %*% t(uno))
   B <- as.numeric(uno %*% Sigma_inv %*% mu)
   lambda_star <- (B - gamma) / A
   
+  # Cálculo de alpha
   parte_mu <- (1 / gamma) * (Sigma_inv %*% mu)
   parte_restriccion <- Sigma_inv %*% t(uno) * (lambda_star / gamma)
   alpha <- parte_mu - parte_restriccion
   
   alpha_vec <- as.numeric(alpha)
-  names(alpha_vec) <- colnames(X_past)
+  names(alpha_vec) <- paste0("alpha_", 1:N)
+  
   
   return(alpha_vec)
 }
@@ -200,12 +154,12 @@ posiciones_cortas <- function(X_past, X_reales, gamma) {
 
 ```{r}
 # Supongamos que ya tienes X_train, X_test y modelos ajustados
-alphas_optimos <- posiciones_cortas(
-  X_past = X_train,
-  X_reales = X_test,
-  gamma = 5    # aversión al riesgo
-)
+mu=mod_mod$mu_hat
+var=mod_mod$se_hat
+sd=sqrt(var)
+Sigma=construccion_sigma_t(sd,datos)
 
+alphas_optimos <- posiciones_cortas(mu,Sigma,gamma=5)
 # Mostrar resultados
 print(alphas_optimos)
 sum(alphas_optimos)
@@ -214,50 +168,32 @@ sum(alphas_optimos)
 
 ```{r}
 library(quadprog)
-sin_posiciones_cortas <- function(X_past, X_reales, gamma) {
-  # Número de activos
-  N <- ncol(X_past)
+sin_posiciones_cortas  <- function(mu, Sigma, gamma){
+  N <- length(mu)
   
-  # Seleccionar la fila actual de X_reales (solo un paso ahead)
-  X_test_past <- X_reales[1, , drop = FALSE]
-  
-  # 1. Pronóstico one-step-ahead
-  pred <- oneStepAhead(X_past, X_test_past)
-  mu <- as.numeric(pred$mean)
-  
-  # 2. Matriz de covarianza
-  Sigma_list <- construccion_sigma_t(X_past, X_test_past)
-  Sigma_t <- Sigma_list[[1]]
-  
-  # 3. Definir parámetros para solve.QP
-  Dmat <- gamma * Sigma_t
+  # Definir parámetros para solve.QP
+  Dmat <- gamma * Sigma
   dvec <- mu
   Aeq <- matrix(1, nrow = N, ncol = 1)
   G <- diag(N)
   Amat <- cbind(Aeq, G)
   bvec <- c(1, rep(0, N))
   
-  # 4. Resolver problema de optimización cuadrática
+  # Resolver problema de optimización cuadrática
   sol <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = 1)
   
-  # 5. Ajustes finales: redondear y eliminar negativos
+  # Ajustes finales: redondear y eliminar negativos
   alpha_vec <- round(sol$solution, 8)
   alpha_vec[alpha_vec < 0] <- 0
-  names(alpha_vec) <- colnames(X_past)
+  names(alpha_vec) <- paste0("alpha_", 1:N)
   
   return(alpha_vec)
 }
-
-
 ```
 
 
 ```{r}
-alphas_sin_cortos <- sin_posiciones_cortas(
-  X_past = X_train,
-  X_reales = X_test,
-  gamma = 5
-)
+alphas_sin_cortos <- sin_posiciones_cortas(mu,Sigma,gamma = 5)
 
 print(alphas_sin_cortos)
 sum(alphas_sin_cortos)
