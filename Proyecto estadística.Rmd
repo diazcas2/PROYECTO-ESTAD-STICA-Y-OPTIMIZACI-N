@@ -18,7 +18,7 @@ library(gridExtra)
 library(dplyr)
 library(jsonlite)
 
-datos <- read_csv("stock_returns_train.csv")
+datos <- read_csv("stock_returns_train_2.csv")
 ```
 
 # 1. Planteamiento
@@ -35,42 +35,35 @@ datos <- read_csv("stock_returns_train.csv")
 1)
 
 ```{r}
-oneStepAhead <- function(X_train, X_test_past) {
-  # Seleccionar primeras 5 columnas numéricas
-  num_cols <- names(X_train)[sapply(X_train, is.numeric)]
-  assets   <- num_cols[1:5]
+oneStepAhead <- function(x_train, x_test_past) {
   
-  mu_hat_list <- numeric(length(assets))
-  se_hat_list <- numeric(length(assets))
-  names(mu_hat_list) <- names(se_hat_list) <- assets
-  
-  for (asset in assets) {
-    x_train <- as.numeric(na.omit(X_train[[asset]]))
-    x_test_past_asset <- as.numeric(na.omit(X_test_past[[asset]]))
-    
-    # 1. Ajustar modelo ARIMA sobre el histórico de entrenamiento
-    mod <- auto.arima(x_train, stepwise = FALSE, approximation = FALSE)
-    
-    # 2. Actualizar el modelo con todo el histórico disponible
-    x_past <- c(x_train, x_test_past_asset)
-    fit_upd <- Arima(x_past, model = mod)
-    
-    # 3. Forecast one-step-ahead
-    fc <- forecast(fit_upd, h = 1)
-    mu_hat <- as.numeric(fc$mean[1])
-    
-    # 4. Estimar error estándar a partir del intervalo del 80%
-    z80 <- qnorm(0.8)
-    se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
-    se_from_lo <- (fc$mean[1] - fc$lower[,"80%"][1]) / z80
-    se_hat <- as.numeric(pmax(se_from_up, se_from_lo))
-    
-    # Guardar resultados
-    mu_hat_list[asset] <- mu_hat
-    se_hat_list[asset] <- se_hat
+  # Convertimos a vector numérico limpio
+  x_train <- as.numeric(na.omit(x_train))
+  x_test_past <- as.numeric(na.omit(x_test_past))
+
+  if (length(x_test_past) == 0) {
+    x_past <- x_train
+  } else {
+    x_past <- c(x_train, x_test_past)
   }
   
-  return(list(mu_hat = mu_hat_list, se_hat = se_hat_list))
+  # 1. Ajustamos ARIMA al histórico
+  mod <- auto.arima(x_train, stepwise = FALSE, approximation = FALSE)
+  
+  # 2. Actualizamos el modelo
+  fit_upd <- Arima(x_past, model = mod)
+  
+  # 3. Forecast one-step-ahead
+  fc <- forecast(fit_upd, h = 1)
+  mu_hat <- as.numeric(fc$mean[1])
+  
+  # 4. Estimamos el error estándar usando intervalo 80%
+  z80 <- qnorm(0.8)
+  se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
+  se_from_lo <- (fc$mean[1] - fc$lower[,"80%"][1]) / z80
+  se_hat <- as.numeric(max(se_from_up, se_from_lo))
+  
+  return(list(mu_hat = mu_hat, se_hat = se_hat))
 }
 
 
@@ -208,43 +201,36 @@ alphas_sin_cortos < 0
 
 ```{r}
 getAlphaLog <- function(mu, Sigma, gamma){
-  # INPUT:
-  # mu: vector en R^5 con los rendimientos esperados
-  # Sigma: matriz de covarianza 5x5
-  # gamma: aversión al riesgo
-  
   N <- length(mu)
-  penalty_weight <- 1e4   # penalización fuerte para asegurar suma=1
   
-  # Función objetivo penalizada
-  f_obj <- function(alpha){
-    alpha <- matrix(alpha, ncol = 1)
-    muTalpha <- as.numeric(t(alpha) %*% mu)
-    alphaTSigmaAlpha <- as.numeric(t(alpha) %*% Sigma %*% alpha)
-    
-    # Utilidad log aproximada (Taylor)
-    Ulog <- log(1 + muTalpha) - (gamma/2) * alphaTSigmaAlpha / ((1 + muTalpha)^2)
-    
-    # Penalización por violar la suma = 1
-    penalty <- penalty_weight * (sum(alpha) - 1)^2
-    
-    return(-(Ulog) + penalty)
+  # Transformación softmax para imponer suma=1
+  softmax <- function(z){
+    e <- exp(z - max(z))
+    return(e / sum(e))
   }
   
-  # Inicialización: pesos iguales
-  alpha0 <- rep(1/N, N)
+  # Función objetivo sobre z (no sobre alpha directamente)
+  f_obj <- function(z){
+    alpha <- softmax(z)
+    muTalpha <- sum(alpha * mu)
+    alphaTSigmaAlpha <- t(alpha) %*% Sigma %*% alpha
+    
+    Ulog <- log(1 + muTalpha) -
+      (gamma/2) * alphaTSigmaAlpha / (1 + muTalpha)^2
+    
+    return(-Ulog)
+  }
   
-  # Optimización sin límites (permitimos cortas)
-  sol <- optim(par = alpha0, fn = f_obj, method = "BFGS")
+  # inicialización
+  z0 <- rep(0, N)
   
-  alpha <- sol$par
-  alpha <- round(alpha, 5)
+  sol <- optim(par = z0, fn = f_obj, method="BFGS")
   
-  # Renombramos
+  alpha <- softmax(sol$par)
   names(alpha) <- paste0("alpha_Log_", 1:N)
-  
   return(alpha)
 }
+
 
 ```
 
