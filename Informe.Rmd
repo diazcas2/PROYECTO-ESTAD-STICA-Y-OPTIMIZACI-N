@@ -1,6 +1,6 @@
 ---
 title: "Informe_ARIMAS"
-author: "Azahara Martinez, Iyán Álvarez,  Maria de los Ángeles Diaz, Flor Pellegrini"
+author: "Azahara Martinez, Iyán Álvarez, Maria de los Ángeles Diaz, Flor Pellegrini"
 date: "2025-12-11"
 output:
   pdf_document: default
@@ -110,7 +110,31 @@ En esta sección permitimos \emph{posiciones cortas}, es decir, pesos $\alpha_i$
 \sum_i \alpha_i = 1.
 \]
 
-#TODO AÑADIR METODO DE OPTIMIZACION
+\subsubsection{Método de optimización en el caso con posiciones cortas}
+
+Para este caso, utilizamos una versión clásica del modelo de media--varianza en la que la única restricción impuesta es que la suma de los pesos sea igual a uno, es decir,
+\[
+\sum_{i=1}^{N} \alpha_i = 1,
+\]
+permitiendo que algunos pesos puedan tomar valores negativos. Bajo estas condiciones, el problema de optimización en cada fecha \(t\) consiste en maximizar la utilidad cuadrática
+\[
+U(\alpha_t) \;=\; \alpha_t^\top \mu_t \;-\; \frac{\gamma}{2} \alpha_t^\top \Sigma_t \alpha_t,
+\]
+donde \(\mu_t\) es el vector de rendimientos esperados y \(\Sigma_t\) la matriz de covarianza dinámica construida previamente.  
+
+Debido a que el problema presenta una única restricción lineal, se puede obtener una \textit{solución en forma cerrada}. Esta solución se implementa en la función \texttt{posiciones\_cortas}, basada en derivar las condiciones de óptimo de primer orden. En concreto:
+
+\begin{itemize}
+    \item Se utiliza la matriz inversa de \(\Sigma_t\), es decir, \(\Sigma_t^{-1}\), para reformular las condiciones de primer orden.
+    \item Se introduce un multiplicador de Lagrange \(\lambda^\ast\) asociado a la restricción \(\sum_i \alpha_i = 1\).
+    \item La solución final para los pesos se obtiene como
+    \[
+    \alpha_t \;=\; \frac{1}{\gamma} \Sigma_t^{-1} \mu_t \;-\; \frac{\lambda^\ast}{\gamma} \Sigma_t^{-1} \mathbf{1},
+    \]
+    donde \(\mathbf{1}\) es un vector de unos y \(\lambda^\ast\) asegura que los pesos sumen exactamente uno.
+\end{itemize}
+
+Esta formulación tiene dos ventajas importantes: (i) es computacionalmente muy eficiente, pues evita recurrir a algoritmos iterativos, y (ii) hace explícita la relación entre el parámetro de aversión al riesgo \(\gamma\), los rendimientos esperados y la estructura de riesgo de la cartera. Sin embargo, al permitir posiciones negativas, la solución puede arrojar pesos muy grandes en valor absoluto, lo que se refleja en una mayor volatilidad y potencial apalancamiento. Por ello, la selección del parámetro \(\gamma\) mediante el Sharpe Ratio es fundamental para evitar soluciones inestables.
 
 La solución se implementa en la función \texttt{posiciones\_cortas}, que utiliza la inversa de $\Sigma$ para obtener una solución cerrada al problema media--varianza con esa restricción de suma uno. El esquema general de la utilidad es el descrito en el apartado anterior, con un parámetro de aversión al riesgo $\gamma_{\text{MV}}$ seleccionado mediante el criterio de Sharpe.
 
