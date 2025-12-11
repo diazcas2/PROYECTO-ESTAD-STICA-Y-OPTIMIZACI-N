@@ -151,4 +151,4 @@ El parámetro de aversión al riesgo $\gamma_{\text{Log}}$ se elige también med
 
 \section{División del trabajo}
 
-#TODO
+Aunque el equipo está formado por cuatro integrantes, no dividimos el trabajo en partes aisladas. En su lugar, decidimos reunirnos en varias sesiones presenciales y trabajar siempre de manera conjunta. Esta metodología nos permitió contrastar ideas en tiempo real, detectar errores más rápidamente y combinar diferentes puntos de vista en cada decisión de modelización. Consideramos que “cuatro cabezas piensan más que una”, y por ello optamos por avanzar todas las secciones del proyecto de forma colaborativa en lugar de repartir tareas individuales.
