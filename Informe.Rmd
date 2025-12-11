@@ -34,6 +34,7 @@ En la Sección~2 utilizamos modelos ARIMA univariantes para pronosticar los rend
     \item Para cada activo y fecha del periodo de test, usamos únicamente la información disponible hasta ese momento.
     \item Ajustamos automáticamente un modelo ARIMA con la función \texttt{auto.arima} del paquete \texttt{forecast}.
     \item Actualizamos el modelo con los datos más recientes y obtenemos el pronóstico one-step-ahead con \texttt{forecast}.
+    \end{itemize}
 
 El flujo se implementa en una función \texttt{oneStepAhead}, que es llamada repetidamente por una función auxiliar \texttt{getPred\_ts} (proporcionada en \texttt{eval\_funcs.R}) para recorrer la serie completa. De este modo, obtenemos dos matrices para el periodo de test:
 \[
