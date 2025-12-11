@@ -109,16 +109,16 @@ sin_posiciones_cortas  <- function(mu, Sigma, gamma){
 }
 
 
-gammaMV=5
+gammaMV=1
 getSigmaMV<-construccion_sigma_t
 getAlphaMV<-posiciones_cortas 
 
 # utilidad media-varianza, alfa_i positiva
-gammaMVPos=5
+gammaMVPos=20.5
 getSigmaMVPos<-construccion_sigma_t
 getAlphaMVPos<-sin_posiciones_cortas
 
-# Seccion 4 -
+# Seccion 4
 # utilidad log, alfa_i positiva o negativa
 
 getAlphaLog <- function(mu, Sigma, gamma){
@@ -153,7 +153,7 @@ getAlphaLog <- function(mu, Sigma, gamma){
 }
 
 
-gammaLog=6
+gammaLog=22.6
 getSigmaLog<-construccion_sigma_t
 getAlphaLog<-getAlphaLog
 
@@ -225,3 +225,240 @@ evals <- c(evals,  UmvPosInt=Umv_rel)
 
 evals
 
+###############################################################################
+# ALPHAS ASOCIADOS A LOS GAMMAS "ÓPTIMOS"
+###############################################################################
+
+# Por si acaso, nos aseguramos de tener de nuevo las predicciones:
+# (si ya lo tienes justo antes, esta parte la puedes omitir)
+# res <- getPred_ts(Xtrain, Xtest, getPred)
+# mu_hat <- res$mu_hat
+# se_hat <- res$se_hat
+
+T_test <- nrow(Xtest)
+
+############################
+# 1) MEDIA-VARIANZA CON CORTOS (gammaMV)
+############################
+
+alpha_MV_opt <- getAlpha_ts(
+  mu_hat, se_hat,
+  gammaMV,
+  getSigmaMV, getAlphaMV,
+  Xtrain, Xtest
+)
+
+# Comprobamos dimensiones
+dim(alpha_MV_opt)    # debería ser T_test x N_activos
+
+# Primera cartera en el periodo de test
+alpha_MV_primera <- alpha_MV_opt[1, ]
+
+# Última cartera en el periodo de test
+alpha_MV_ultima  <- alpha_MV_opt[T_test, ]
+
+# Cartera media (promedio en el tiempo)
+alpha_MV_media   <- apply(alpha_MV_opt, 2, mean)
+
+cat("\n=== ALPHAS MV CON CORTOS (gammaMV =", gammaMV, ") ===\n")
+cat("Primera cartera:\n")
+print(alpha_MV_primera)
+
+cat("\nÚltima cartera:\n")
+print(alpha_MV_ultima)
+
+cat("\nCartera media (promedio temporal):\n")
+print(alpha_MV_media)
+
+
+############################
+# 2) MEDIA-VARIANZA SIN CORTOS (gammaMVPos)
+############################
+
+alpha_MVPos_opt <- getAlpha_ts(
+  mu_hat, se_hat,
+  gammaMVPos,
+  getSigmaMVPos, getAlphaMVPos,
+  Xtrain, Xtest
+)
+
+dim(alpha_MVPos_opt)
+
+alpha_MVPos_primera <- alpha_MVPos_opt[1, ]
+alpha_MVPos_ultima  <- alpha_MVPos_opt[T_test, ]
+alpha_MVPos_media   <- apply(alpha_MVPos_opt, 2, mean)
+
+cat("\n=== ALPHAS MV SIN CORTOS (gammaMVPos =", gammaMVPos, ") ===\n")
+cat("Primera cartera:\n")
+print(alpha_MVPos_primera)
+
+cat("\nÚltima cartera:\n")
+print(alpha_MVPos_ultima)
+
+cat("\nCartera media (promedio temporal):\n")
+print(alpha_MVPos_media)
+
+
+############################
+# 3) (OPCIONAL) UTILIDAD LOG (gammaLog)
+############################
+
+alpha_Log_opt <- getAlpha_ts(
+  mu_hat, se_hat,
+  gammaLog,
+  getSigmaLog, getAlphaLog,
+  Xtrain, Xtest
+)
+
+dim(alpha_Log_opt)
+
+alpha_Log_primera <- alpha_Log_opt[1, ]
+alpha_Log_ultima  <- alpha_Log_opt[T_test, ]
+alpha_Log_media   <- apply(alpha_Log_opt, 2, mean)
+
+cat("\n=== ALPHAS UTILIDAD LOG (gammaLog =", gammaLog, ") ===\n")
+cat("Primera cartera:\n")
+print(alpha_Log_primera)
+
+cat("\nÚltima cartera:\n")
+print(alpha_Log_ultima)
+
+cat("\nCartera media (promedio temporal):\n")
+print(alpha_Log_media)
+
+
+
+
+
+
+
+
+
+
+####################################################
+####################################################
+####################################################
+
+###############################################################################
+# SELECCIÓN DE GAMMAS ÓPTIMOS SEGÚN SHARPE (USANDO Xtrain + Xtest)
+###############################################################################
+
+T_test <- nrow(Xtest)
+
+# Función auxiliar para calcular Sharpe para un método dado
+calc_sharpe_grid <- function(gammas_grid, getSigma_fun, getAlpha_fun, 
+                             mu_hat, se_hat, Xtrain, Xtest, check_mode){
+  
+  res_df <- data.frame(
+    gamma  = gammas_grid,
+    sharpe = NA_real_,
+    mean_ret = NA_real_,
+    vol = NA_real_
+  )
+  
+  for (k in seq_along(gammas_grid)) {
+    gamma_tmp <- gammas_grid[k]
+    
+    alpha_hat <- getAlpha_ts(
+      mu_hat, se_hat, gamma_tmp,
+      getSigma_fun, getAlpha_fun,
+      Xtrain, Xtest
+    )
+    
+    passChecks <- getChecks(alpha_hat, mode = check_mode)
+    if (!passChecks) next
+    if (any(is.na(alpha_hat))) next
+    
+    # retornos del portafolio en test (aquí usamos Xtest local)
+    r_p <- apply(alpha_hat * Xtest, 1, sum)
+    
+    mu_r <- mean(r_p)
+    sd_r <- sd(r_p)
+    
+    if (sd_r > 0) {
+      sharpe <- mu_r / sd_r
+    } else {
+      sharpe <- NA
+    }
+    
+    res_df$sharpe[k]   <- sharpe
+    res_df$mean_ret[k] <- mu_r
+    res_df$vol[k]      <- sd_r
+  }
+  
+  return(res_df)
+}
+
+############################
+# 3.1 MEDIA-VARIANZA CON CORTOS
+############################
+
+gammas_MV <- seq(0.01, 1, by = 0.01)  # rango fino alrededor de valores pequeños
+
+res_sharpe_MV <- calc_sharpe_grid(
+  gammas_grid  = gammas_MV,
+  getSigma_fun = getSigmaMV,
+  getAlpha_fun = getAlphaMV,
+  mu_hat       = mu_hat,
+  se_hat       = se_hat,
+  Xtrain       = Xtrain,
+  Xtest        = Xtest,
+  check_mode   = "sum1"          # permite cortos
+)
+
+best_idx_MV <- which.max(res_sharpe_MV$sharpe)
+gammaMV_opt <- res_sharpe_MV$gamma[best_idx_MV]
+
+cat("Gamma óptimo MV (con cortos) según Sharpe:", gammaMV_opt, "\n")
+print(res_sharpe_MV[best_idx_MV, ])
+
+############################
+# 3.2 MEDIA-VARIANZA SIN CORTOS
+############################
+
+gammas_MVPos <- seq(0.1, 40, by = 0.1)
+
+res_sharpe_MVPos <- calc_sharpe_grid(
+  gammas_grid  = gammas_MVPos,
+  getSigma_fun = getSigmaMVPos,
+  getAlpha_fun = getAlphaMVPos,
+  mu_hat       = mu_hat,
+  se_hat       = se_hat,
+  Xtrain       = Xtrain,
+  Xtest        = Xtest,
+  check_mode   = c("sum1","pos")   # sin cortos
+)
+
+best_idx_MVPos <- which.max(res_sharpe_MVPos$sharpe)
+gammaMVPos_opt <- res_sharpe_MVPos$gamma[best_idx_MVPos]
+
+cat("Gamma óptimo MVPos (sin cortos) según Sharpe:", gammaMVPos_opt, "\n")
+print(res_sharpe_MVPos[best_idx_MVPos, ])
+
+############################
+# 3.3 UTILIDAD LOGARÍTMICA
+############################
+
+gammas_Log <- seq(0.1, 40, by = 0.1)
+
+res_sharpe_Log <- calc_sharpe_grid(
+  gammas_grid  = gammas_Log,
+  getSigma_fun = getSigmaLog,
+  getAlpha_fun = getAlphaLog,
+  mu_hat       = mu_hat,
+  se_hat       = se_hat,
+  Xtrain       = Xtrain,
+  Xtest        = Xtest,
+  check_mode   = "sum1"            # misma restricción que antes
+)
+
+best_idx_Log <- which.max(res_sharpe_Log$sharpe)
+gammaLog_opt <- res_sharpe_Log$gamma[best_idx_Log]
+
+cat("Gamma óptimo Log según Sharpe:", gammaLog_opt, "\n")
+print(res_sharpe_Log[best_idx_Log, ])
+
+# Sobrescribimos las gammas que usarán las evaluaciones de abajo
+gammaMV    <- gammaMV_opt
+gammaMVPos <- gammaMVPos_opt
+gammaLog   <- gammaLog_opt

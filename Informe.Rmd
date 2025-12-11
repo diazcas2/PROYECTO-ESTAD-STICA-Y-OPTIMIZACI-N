@@ -1,0 +1,154 @@
+---
+title: "Informe_ARIMAS"
+author: "Azahara Martinez, Iyán Álvarez,  Maria de los Ángeles Diaz, Flor Pellegrini"
+date: "2025-12-11"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\section{Introducción}
+
+El objetivo del proyecto es construir y evaluar distintas estrategias de inversión dinámicas aplicadas a una cartera de cinco activos financieros. Para ello, seguimos dos pasos principales:
+
+\begin{itemize}
+    \item Pronosticar los rendimientos con una función one-step-ahead (Sección~2).
+    \item Optimizar la composición de la cartera en cada periodo de test utilizando tres criterios de utilidad diferentes (Secciones~3.1, 3.2 y 4).
+\end{itemize}
+
+Partimos del archivo \texttt{stock\_returns\_train\_2.csv}, que transformamos a rendimientos en tanto por uno y dividimos en dos bloques: 96 periodos para entrenamiento y 24 para test. Todas las decisiones de evaluación y comparación de métodos se realizan sobre este periodo de test, de forma que podamos valorar el comportamiento fuera de muestra de las estrategias.
+
+El trabajo se ha realizado en equipo porque, además de repartir la carga de programación y redacción, nos ha permitido combinar perfiles y puntos fuertes diferentes. Trabajar de forma colaborativa también ha servido para detectar errores antes y contrastar decisiones de modelización.
+
+\section{Predicción one-step-ahead}
+
+\subsection{Técnica utilizada y justificación}
+
+En la Sección~2 utilizamos modelos ARIMA univariantes para pronosticar los rendimientos de cada activo un paso adelante. La idea es la siguiente:
+
+\begin{itemize}
+    \item Para cada activo y fecha del periodo de test, usamos únicamente la información disponible hasta ese momento.
+    \item Ajustamos automáticamente un modelo ARIMA con la función \texttt{auto.arima} del paquete \texttt{forecast}.
+    \item Actualizamos el modelo con los datos más recientes y obtenemos el pronóstico one-step-ahead con \texttt{forecast}.
+
+El flujo se implementa en una función \texttt{oneStepAhead}, que es llamada repetidamente por una función auxiliar \texttt{getPred\_ts} (proporcionada en \texttt{eval\_funcs.R}) para recorrer la serie completa. De este modo, obtenemos dos matrices para el periodo de test:
+\[
+\hat{\mu}_t \quad \text{(rendimientos esperados)} \qquad \text{y} \qquad
+\hat{\sigma}_t \quad \text{(desviaciones estándar)}, \qquad t \in \text{Test}.
+\]
+
+Elegimos ARIMA con selección automática por varias razones:
+
+\begin{itemize}
+    \item Es una clase de modelos muy utilizada en predicción de series financieras y además es el que hemos visto en la asignatura.
+    \item \texttt{auto.arima} permite seleccionar el orden del modelo de forma sistemática, evitando un ajuste manual activo por activo.
+    \item Es un método razonablemente flexible que captura tanto tendencia como autocorrelación.
+\end{itemize}
+
+
+\section{Optimización media--varianza}
+
+En las Secciones~3.1 y 3.2 utilizamos el marco clásico de media--varianza para decidir los pesos de la cartera en cada fecha del periodo de test.
+
+\subsection{Construcción de la matriz de covarianza}
+
+A partir de las desviaciones estándar pronosticadas $\hat{\sigma}_t$ y de los rendimientos históricos, construimos una matriz de covarianzas dinámica:
+
+\begin{itemize}
+    \item Primero se forma una matriz diagonal $D_t$ con las desviaciones estándar de cada activo.
+    \item Se calcula una matriz de correlaciones $R$ a partir de los rendimientos pasados (correlación muestral).
+    \item Definimos
+    \[
+        \Sigma_t = D_t \, R \, D_t
+    \]
+    mediante la función \texttt{construccion\_sigma\_t}.
+\end{itemize}
+
+Esta construcción permite combinar información de volatilidades pronosticadas con correlaciones históricas relativamente estables.
+
+\subsection{Función de utilidad media--varianza}
+
+En cada fecha $t$, la cartera $\alpha_t$ se elige maximizando una utilidad de tipo:
+\[
+U(\alpha_t) \;=\; \alpha_t^\top \mu_t \;-\; \frac{\gamma}{2}\,\alpha_t^\top \Sigma_t \alpha_t,
+\]
+
+En ambos casos imponemos la restricción
+\[
+\sum_i \alpha_{i,t} = 1;
+\]
+la diferencia está en si se permite o no que algunos pesos sean negativos.
+
+\subsection{Selección de $\gamma$ (criterio de Sharpe)}
+
+Probamos distintos valores de $\gamma$ en una rejilla y, para cada uno:
+
+\begin{itemize}
+    \item Generamos las carteras dinámicas $\alpha_t(\gamma)$ en el periodo de test.
+    \item Calculamos los retornos del portafolio
+    \[
+        r_{p,t}(\gamma) \;=\; \sum_i \alpha_{i,t}(\gamma)\, X_{i,t}.
+    \]
+    \item Evaluamos un indicador de desempeño como el Sharpe Ratio:
+    \[
+        \text{Sharpe}(\gamma) \;=\; 
+        \frac{\overline{r_p(\gamma)}}{\text{sd}\big(r_p(\gamma)\big)},
+    \]
+    donde $\overline{r_p(\gamma)}$ es la media de los retornos del portafolio y $\text{sd}(\cdot)$ su desviación estándar.
+\end{itemize}
+
+Elegimos como $\gamma$ óptimo aquel que maximiza el Sharpe dentro de un rango razonable, de modo que se favorezcan portafolios eficientes en términos de rentabilidad--riesgo y se eviten soluciones excesivamente apalancadas.
+
+\subsection{Media--varianza con posiciones cortas (Sección 3.1)}
+
+En esta sección permitimos \emph{posiciones cortas}, es decir, pesos $\alpha_i$ negativos. La única restricción explícita es:
+\[
+\sum_i \alpha_i = 1.
+\]
+
+#TODO AÑADIR METODO DE OPTIMIZACION
+
+La solución se implementa en la función \texttt{posiciones\_cortas}, que utiliza la inversa de $\Sigma$ para obtener una solución cerrada al problema media--varianza con esa restricción de suma uno. El esquema general de la utilidad es el descrito en el apartado anterior, con un parámetro de aversión al riesgo $\gamma_{\text{MV}}$ seleccionado mediante el criterio de Sharpe.
+
+
+\subsection{Media--varianza sin posiciones cortas (Sección 3.2)}
+
+En este caso imponemos que todos los pesos sean no negativos, $\alpha_i \ge 0$, además de la condición de suma uno. Esto elimina el apalancamiento asociado a posiciones cortas y produce carteras más fáciles de interpretar para un inversor típico.
+
+El problema media--varianza bajo estas restricciones se resuelve con la función \texttt{solve.QP} del paquete \texttt{quadprog}, a través de la función propia \texttt{sin\_posiciones\_cortas}. En cada fecha, construimos:
+
+\begin{itemize}
+    \item La matriz de penalización cuadrática \texttt{Dmat = gamma * Sigma}.
+    \item El vector lineal \texttt{dvec = mu}.
+    \item Las matrices de restricciones que fuerzan suma de pesos igual a uno y $\alpha_i \ge 0$.
+\end{itemize}
+
+De nuevo, el parámetro de aversión al riesgo $\gamma_{\text{MVPos}}$ se elige mediante un análisis de rejilla y maximizando el Sharpe Ratio en el periodo de test.
+
+
+\section{Utilidad logarítmica}
+
+En la Sección~4 reemplazamos la utilidad media--varianza por una utilidad logarítmica aproximada que tiene en cuenta tanto el crecimiento de la riqueza como la penalización del riesgo:
+\[
+U(\alpha_t) \approx \log\bigl(1 + \alpha_t^\top \mu_t\bigr)
+\;-\;
+\frac{\gamma}{2}\,
+\frac{\alpha_t^\top \Sigma_t \alpha_t}{\bigl(1 + \alpha_t^\top \mu_t\bigr)^2},
+\]
+sujeta a la restricción $\sum_i \alpha_i = 1$. Para garantizar esta condición, parametrizamos los pesos mediante una función \emph{softmax} de un vector $z$, de forma que:
+\[
+\alpha_i \;=\; \frac{\exp(z_i)}{\sum_j \exp(z_j)}.
+\]
+
+La optimización se lleva a cabo con la función \texttt{optim} de base R (método BFGS), aplicada a la función objetivo negativa de $U$. La implementación se recoge en la función \texttt{getAlphaLog}, y se utiliza una matriz de covarianzas \texttt{construccion\_sigma\_t} análoga a la de media--varianza.
+
+El parámetro de aversión al riesgo $\gamma_{\text{Log}}$ se elige también mediante un análisis de rejilla y el criterio de Sharpe en el periodo de test, de forma similar a las secciones anteriores.
+
+
+\section{División del trabajo}
+
+#TODO
