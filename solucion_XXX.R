@@ -114,7 +114,7 @@ getSigmaMV<-construccion_sigma_t
 getAlphaMV<-posiciones_cortas 
 
 # utilidad media-varianza, alfa_i positiva
-gammaMVPos=20.5
+gammaMVPos=34.5
 getSigmaMVPos<-construccion_sigma_t
 getAlphaMVPos<-sin_posiciones_cortas
 
@@ -153,7 +153,7 @@ getAlphaLog <- function(mu, Sigma, gamma){
 }
 
 
-gammaLog=22.6
+gammaLog=4.9
 getSigmaLog<-construccion_sigma_t
 getAlphaLog<-getAlphaLog
 
@@ -185,7 +185,7 @@ se_hat = res$se_hat
 # MAPE
 i <- 2
 plot(as.data.frame(Xtest)[,i], ty="l")
-lines(mu_hat[,i], col="blue", ty="l")
+lines(mu_hat[,i], col="blue", ty="l") 
 
 
 
@@ -462,3 +462,7 @@ print(res_sharpe_Log[best_idx_Log, ])
 gammaMV    <- gammaMV_opt
 gammaMVPos <- gammaMVPos_opt
 gammaLog   <- gammaLog_opt
+
+gammaMV
+gammaMVPos
+gammaLog
