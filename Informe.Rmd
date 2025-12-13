@@ -19,14 +19,14 @@ Partimos del archivo \texttt{stock\_returns\_train\_2.csv}, que transformamos a 
 
 
 \section{Predicción one-step-ahead}
-En la Sección~2 se utilizan modelos ARIMA univariantes para obtener pronósticos one-step-ahead de los rendimientos de cada activo. Para cada fecha del periodo de test, el modelo se estima empleando únicamente la información disponible hasta ese momento. La especificación del modelo se selecciona automáticamente mediante la función \texttt{auto.arima} del paquete forecast, lo que permite una elección sistemática del orden y una captura flexible de la tendencia y la autocorrelación.
+En la Sección ~ 2 se utilizan modelos ARIMA univariantes para obtener pronósticos one-step-ahead de los rendimientos de cada activo. Para cada fecha del periodo de test, el modelo se estima empleando únicamente la información disponible hasta ese momento. La especificación del modelo se selecciona automáticamente mediante la función \texttt{auto.arima} del paquete forecast, lo que permite una elección sistemática del orden y una captura flexible de la tendencia y la autocorrelación.
 
-El modelo se actualiza de forma recursiva, ya que es llamada repetidamente por una función auxiliar \texttt{getPred\_ts} (proporcionada en \texttt{eval\_funcs.R}). Como resultado, para el periodo de test se obtienen dos matrices: los rendimientos esperados $\hat{\mu}_t$ y sus desviaciones estándar correspondientes $\hat{\sigma}_t$ para $t \in \{T+1,\cdots, T+r\}$.
+El modelo se actualiza de forma recursiva, ya que es llamado repetidamente por una función auxiliar \texttt{getPred\_ts} (proporcionada en \texttt{eval\_funcs.R}). Como resultado, para el periodo de test se obtienen dos matrices: los rendimientos esperados $\hat{\mu}_t$ y sus desviaciones estándar correspondientes $\hat{\sigma}_t$ para $t \in \{T+1,\cdots, T+r\}$.
 
 
 \section{Optimización media-varianza}
 
-En las Secciones~3.1 y 3.2 utilizamos el marco clásico de media--varianza para decidir los pesos de la cartera en cada fecha del periodo de test. Para ello necesitamos construir primero la matriz de covarianzas dinámica, que viene dada a partir de las desviaciones estándar pronosticadas $\hat{\sigma}_t$ (haciendo uso de la función anterior) y de los rendimientos históricos. Denotada como \texttt{sigma\_t}, esta matriz combina información de volatilidades pronosticadas con correlaciones históricas relativamente estables. En concreto, se obtiene como el producto de una matriz diagonal $D_t$, que contiene las desviaciones estándar de cada activo, y una matriz de correlación $R$ estimada con rendimientos pasados:
+En las Secciones ~ 3.1 y 3.2 utilizamos el marco clásico de media--varianza para decidir los pesos de la cartera en cada fecha del periodo de test. Para ello necesitamos construir primero la matriz de covarianzas dinámica, que viene dada a partir de las desviaciones estándar pronosticadas $\hat{\sigma}_t$ (haciendo uso de la función anterior) y de los rendimientos históricos. Denotada como \texttt{sigma\_t}, esta matriz combina información de volatilidades pronosticadas con correlaciones históricas relativamente estables. En concreto, se obtiene como el producto de una matriz diagonal $D_t$, que contiene las desviaciones estándar de cada activo, y una matriz de correlación $R$ estimada con rendimientos pasados:
 
 \[
         \Sigma_t = D_t \, R \, D_t
@@ -60,7 +60,7 @@ De esta forma, se elige como \(\gamma\) óptimo aquel que maximiza el Sharpe den
 
 Para este caso, utilizamos una versión clásica del modelo de media--varianza en la que la única restricción impuesta es que la suma de los pesos sea igual a uno, es decir, $\sum_{i=1}^{N} \alpha_i = 1$ permitiendo que algunos pesos puedan tomar valores negativos. Bajo estas condiciones, el problema de optimización en cada fecha \(t\) consiste en maximizar la utilidad cuadrática vista en la ecuación (\ref{utilidad}). 
 
-Dado que existe una única restricción lineal, se puede resolver mediante el método de Lagrange. Introduciendo el multiplicador $\lambda^*$ asociado a la restricción, las condiciones de primer orden (gradiente de Lagrange igual a cero) se escriben como
+Dado que existe una única restricción lineal, se puede resolver mediante el método de Lagrange. Introduciendo el multiplicador $\lambda^*$ asociado a la restricción, las condiciones de primer orden (gradiente de Lagrange igual a cero) se escriben como:
 
 \[
 \Sigma \alpha - \frac{1}{\gamma} \mu + \frac{\lambda^\ast}{\gamma} \mathbf{1} = 0.
@@ -98,4 +98,4 @@ Aunque el equipo está formado por cuatro integrantes, no dividimos el trabajo e
 
 \section{Reflexiones finales}
 
-En conjunto, el desarrollo del proyecto supuso un reto tanto conceptual como computacional, al requerir integrar predicción, optimización y evaluación fuera de muestra dentro de un mismo marco. El trabajo colaborativo fue especialmente importante para consensuar decisiones metodológicas clave, entre ellas la elección del parámetro de aversión al riesgo $\gamma$. Estos valores se seleccionaron de forma sistemática a partir del desempeño fuera de muestra, priorizando configuraciones que ofrecieran un equilibrio razonable entre rentabilidad y riesgo y evitando soluciones inestables o excesivamente extremas. Lo que permitió obtener carteras coherentes con cada restricción considerada y puso de manifiesto cómo la elección de $\gamma$ condiciona de manera significativa el comportamiento y la agresividad de las estrategias resultantes.
+En conjunto, el desarrollo del proyecto supuso un reto tanto conceptual como computacional, al requerir integrar predicción, optimización y evaluación fuera de muestra dentro de un mismo marco. El trabajo colaborativo fue especialmente importante para consensuar decisiones metodológicas clave, entre ellas la elección del parámetro de aversión al riesgo $\gamma$. Estos valores se seleccionaron de forma sistemática a partir del desempeño fuera de muestra, priorizando configuraciones que ofrecieran un equilibrio razonable entre rentabilidad y riesgo, y evitando soluciones inestables o excesivamente extremas. Esto permitió obtener carteras coherentes con cada restricción considerada y puso de manifiesto cómo la elección de $\gamma$ condiciona de manera significativa el comportamiento y la agresividad de las estrategias resultantes.
