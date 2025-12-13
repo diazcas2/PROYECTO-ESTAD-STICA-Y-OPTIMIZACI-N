@@ -13,40 +13,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 \section{Introducción}
 
-El objetivo del proyecto es construir y evaluar distintas estrategias de inversión dinámicas aplicadas a una cartera de cinco activos financieros. Para ello, seguimos dos pasos principales:
-
-\begin{itemize}
-    \item Pronosticar los rendimientos con una función one-step-ahead (Sección ~ 2).
-    \item Optimizar la composición de la cartera en cada periodo de test utilizando tres criterios de utilidad diferentes (Secciones ~ 3.1, 3.2 y 4).
-\end{itemize}
+El objetivo del proyecto es construir y evaluar distintas estrategias de inversión dinámicas aplicadas a una cartera de cinco activos financieros. Buscando pronosticar los rendimientos con una función one-step-ahead (Sección ~ 2) y optimizar la composición de la cartera en cada periodo de test utilizando tres criterios de utilidad diferentes (Secciones ~ 3.1, 3.2 y 4).
 
 Partimos del archivo \texttt{stock\_returns\_train\_2.csv}, que transformamos a rendimientos en tanto por uno y dividimos en dos bloques: 96 periodos para entrenamiento y 24 para test. Todas las decisiones de evaluación y comparación de métodos se realizan sobre este periodo de test, con el fin de analizar el comportamiento fuera de muestra de las distintas estrategias.
 
 
 \section{Predicción one-step-ahead}
-\subsection{Técnica utilizada y justificación}
+En la Sección~2 se utilizan modelos ARIMA univariantes para obtener pronósticos one-step-ahead de los rendimientos de cada activo. Para cada fecha del periodo de test, el modelo se estima empleando únicamente la información disponible hasta ese momento. La especificación del modelo se selecciona automáticamente mediante la función \texttt{auto.arima} del paquete forecast, lo que permite una elección sistemática del orden y una captura flexible de la tendencia y la autocorrelación.
 
-En la Sección~2 utilizamos modelos ARIMA univariantes para pronosticar los rendimientos de cada activo un paso adelante. La idea es la siguiente:
+El modelo se actualiza de forma recursiva, ya que es llamada repetidamente por una función auxiliar \texttt{getPred\_ts} (proporcionada en \texttt{eval\_funcs.R}). Como resultado, para el periodo de test se obtienen dos matrices: los rendimientos esperados $\hat{\mu}_t$ y sus desviaciones estándar correspondientes $\hat{\sigma}_t$ para $t \in \{T+1,\cdots, T+r\}$.
 
-\begin{itemize}
-    \item Para cada activo y fecha del periodo de test, usamos únicamente la información disponible hasta ese momento.
-    \item Ajustamos automáticamente un modelo ARIMA con la función \texttt{auto.arima} del paquete \texttt{forecast}, ya que permite seleccionar el orden del modelo de forma sistemática, evitando un ajuste manual activo por activo y es razonablemente flexible que captura tanto tendencia como autocorrelación.
-    \item Actualizamos el modelo con los datos más recientes y obtenemos el pronóstico one-step-ahead con \texttt{forecast}
-    \end{itemize}
-
-El flujo se implementa en una función \texttt{oneStepAhead}, que es llamada repetidamente por una función auxiliar \texttt{getPred\_ts} (proporcionada en \texttt{eval\_funcs.R}) para recorrer la serie completa. De este modo, obtenemos dos matrices para el periodo de test:
-\[
-\hat{\mu}_t \quad \text{(rendimientos esperados)} \qquad \text{y} \qquad
-\hat{\sigma}_t \quad \text{(desviaciones estándar)}, \qquad t \in \{T+1,\cdots, T+r\}.
-\]
 
 \section{Optimización media-varianza}
 
-En las Secciones~3.1 y 3.2 utilizamos el marco clásico de media--varianza para decidir los pesos de la cartera en cada fecha del periodo de test.
+En las Secciones~3.1 y 3.2 utilizamos el marco clásico de media--varianza para decidir los pesos de la cartera en cada fecha del periodo de test. Para ello necesitamos construir primero la matriz de covarianzas dinámica, que viene dada a partir de las desviaciones estándar pronosticadas $\hat{\sigma}_t$ (haciendo uso de la función anterior) y de los rendimientos históricos. Denotada como \texttt{sigma\_t}, esta matriz combina información de volatilidades pronosticadas con correlaciones históricas relativamente estables. En concreto, se obtiene como el producto de una matriz diagonal $D_t$, que contiene las desviaciones estándar de cada activo, y una matriz de correlación $R$ estimada con rendimientos pasados:
 
-\subsection{Construcción de la matriz de covarianza}
-
-A partir de las desviaciones estándar pronosticadas $\hat{\sigma}_t$ (haciendo uso de la función anterior) y de los rendimientos históricos, construimos una matriz de covarianzas dinámica, llamada \texttt{sigma\_t}, que permite combinar información de volatilidades pronosticadas con correlaciones históricas relativamente estables. Además, esta proviene del producto matricial de una matriz diagonal llamada D, con las desviaciones estándar de cada activo y de la matriz de correlación R a partir de los rendimientos pasados. De esta forma, hallamos:
 \[
         \Sigma_t = D_t \, R \, D_t
 \]
@@ -54,36 +35,30 @@ mediante la función \texttt{construccion\_sigma\_t}.
 
 \subsection{Función de utilidad media--varianza}
 
-En cada fecha $t$, la cartera $\alpha_t$ se elige maximizando una utilidad de tipo:
+En cada fecha \(t\), la cartera \(\alpha_t\) se obtiene maximizando una utilidad media--varianza de la forma
+
+\begin{equation} \label{utilidad}
+U(\alpha_t) = \alpha_t^\top \mu_t - \frac{\gamma}{2}\,\alpha_t^\top \Sigma_t \alpha_t
+\end{equation}
+
+sujeta a la restricción \(\sum_i \alpha_{i,t} = 1\). La diferencia entre los siguientes apartados radica en permitir o no pesos negativos. Además, es muy importante el parámetro $\gamma$ para los resultados obtenidos. Por eso, usamos el criterio de Sharpe.
+
+\subsection{Selección de \(\gamma\) (criterio de Sharpe)}
+
+Para fijar el parámetro \(\gamma\) utilizamos un criterio de desempeño fuera de muestra. Para distintos valores de \(\gamma\), se generan las carteras dinámicas \(\alpha_t(\gamma)\) en el periodo de test y sus retornos
 \[
-U(\alpha_t) \;=\; \alpha_t^\top \mu_t \;-\; \frac{\gamma}{2}\,\alpha_t^\top \Sigma_t \alpha_t,
+r_{p,t}(\gamma) = \sum_i \alpha_{i,t}(\gamma)\, X_{i,t}.
 \]
-
-En ambos casos se impone la restricción $\sum_i \alpha_{i,t} = 1$. La clave de este apartado reside en si se permite o no que algunos pesos sean negativos. A continuación veremos el proceso elegido para la selección de los gammas.
-
-\subsection{Selección de $\gamma$ (criterio de Sharpe)}
-Para fijar el parámetro $\gamma$ utilizamos un criterio operativo basado en desempeño fuera de muestra. Como $\gamma$ regula el balance entre el retorno esperado y el riesgo en los modelos de utilidad, vamos a elegirlo según la eficiencia rentabilidad–volatilidad del portafolio generado. Para hacerlo práctico, probamos distintos valores de $\gamma$ y, para cada uno, generamos las carteras dinámicas $\alpha_t(\gamma)$ en el periodo de test y obtenemos sus retornos que tendrán la siguiente forma:
-
-    \[
-        r_{p,t}(\gamma) \;=\; \sum_i \alpha_{i,t}(\gamma)\, X_{i,t}.
-    \]
-
-A continuación evaluamos un indicador de desempeño como el Sharpe Ratio:
-    \[
-        \text{Sharpe}(\gamma) \;=\; 
-        \frac{\overline{r_p(\gamma)}}{\text{sd}\big(r_p(\gamma)\big)},
-    \]
-    donde $\overline{r_p(\gamma)}$ es la media de los retornos del portafolio y $\text{sd}(\cdot)$ su desviación estándar.
-
-Elegimos como $\gamma$ óptimo aquel que maximiza el Sharpe dentro de un rango razonable, de modo que se favorezcan portafolios eficientes en términos de rentabilidad--riesgo y se eviten soluciones excesivamente apalancadas.
+Cada configuración se evalúa mediante el Sharpe Ratio,
+\[
+\text{Sharpe}(\gamma) =
+\frac{\overline{r_p(\gamma)}}{\text{sd}\big(r_p(\gamma)\big)}.
+\]
+De esta forma, se elige como \(\gamma\) óptimo aquel que maximiza el Sharpe dentro de un rango razonable, evitando soluciones excesivamente apalancadas.
 
 \subsection{Media--varianza con posiciones cortas (Sección 3.1)}
 
-Para este caso, utilizamos una versión clásica del modelo de media--varianza en la que la única restricción impuesta es que la suma de los pesos sea igual a uno, es decir, $\sum_{i=1}^{N} \alpha_i = 1$ permitiendo que algunos pesos puedan tomar valores negativos. Bajo estas condiciones, el problema de optimización en cada fecha \(t\) consiste en maximizar la utilidad cuadrática
-\[
-U(\alpha_t) \;=\; \alpha_t^\top \mu_t \;-\; \frac{\gamma}{2} \alpha_t^\top \Sigma_t \alpha_t,
-\]
-donde \(\mu_t\) es el vector de rendimientos esperados y \(\Sigma_t\) la matriz de covarianza dinámica construida previamente.  
+Para este caso, utilizamos una versión clásica del modelo de media--varianza en la que la única restricción impuesta es que la suma de los pesos sea igual a uno, es decir, $\sum_{i=1}^{N} \alpha_i = 1$ permitiendo que algunos pesos puedan tomar valores negativos. Bajo estas condiciones, el problema de optimización en cada fecha \(t\) consiste en maximizar la utilidad cuadrática vista en la ecuación (\ref{utilidad}). 
 
 Dado que existe una única restricción lineal, se puede resolver mediante el método de Lagrange. Introduciendo el multiplicador $\lambda^*$ asociado a la restricción, las condiciones de primer orden (gradiente de Lagrange igual a cero) se escriben como
 
@@ -120,3 +95,7 @@ La optimización se realiza utilizando la función optim de R (método BFGS, vis
 \section{División del trabajo}
 
 Aunque el equipo está formado por cuatro integrantes, no dividimos el trabajo en partes aisladas. En su lugar, optamos por trabajar de manera completamente colaborativa, reuniéndonos en varias sesiones presenciales para avanzar todas las secciones del proyecto juntos. Esta metodología nos permitió combinar perfiles y puntos fuertes diferentes, contrastar decisiones de modelización en tiempo real, detectar errores más rápidamente y aprovechar distintas perspectivas en cada etapa. Consideramos que “cuatro cabezas piensan más que una”, por lo que preferimos avanzar de forma conjunta en lugar de repartir tareas individuales.
+
+\section{Reflexiones finales}
+
+En conjunto, el desarrollo del proyecto supuso un reto tanto conceptual como computacional, al requerir integrar predicción, optimización y evaluación fuera de muestra dentro de un mismo marco. El trabajo colaborativo fue especialmente importante para consensuar decisiones metodológicas clave, entre ellas la elección del parámetro de aversión al riesgo $\gamma$. Estos valores se seleccionaron de forma sistemática a partir del desempeño fuera de muestra, priorizando configuraciones que ofrecieran un equilibrio razonable entre rentabilidad y riesgo y evitando soluciones inestables o excesivamente extremas. Lo que permitió obtener carteras coherentes con cada restricción considerada y puso de manifiesto cómo la elección de $\gamma$ condiciona de manera significativa el comportamiento y la agresividad de las estrategias resultantes.
