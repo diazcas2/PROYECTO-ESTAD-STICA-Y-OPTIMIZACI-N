@@ -157,6 +157,7 @@ gammaLog=4.9
 getSigmaLog<-construccion_sigma_t
 getAlphaLog<-getAlphaLog
 
+
 ###############################################################
 # Evaluación de soluciones
 ###############################################################
@@ -224,120 +225,6 @@ Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigma
 evals <- c(evals,  UmvPosInt=Umv_rel)
 
 evals
-
-###############################################################################
-# ALPHAS ASOCIADOS A LOS GAMMAS "ÓPTIMOS"
-###############################################################################
-
-# Por si acaso, nos aseguramos de tener de nuevo las predicciones:
-# (si ya lo tienes justo antes, esta parte la puedes omitir)
-# res <- getPred_ts(Xtrain, Xtest, getPred)
-# mu_hat <- res$mu_hat
-# se_hat <- res$se_hat
-
-T_test <- nrow(Xtest)
-
-############################
-# 1) MEDIA-VARIANZA CON CORTOS (gammaMV)
-############################
-
-alpha_MV_opt <- getAlpha_ts(
-  mu_hat, se_hat,
-  gammaMV,
-  getSigmaMV, getAlphaMV,
-  Xtrain, Xtest
-)
-
-# Comprobamos dimensiones
-dim(alpha_MV_opt)    # debería ser T_test x N_activos
-
-# Primera cartera en el periodo de test
-alpha_MV_primera <- alpha_MV_opt[1, ]
-
-# Última cartera en el periodo de test
-alpha_MV_ultima  <- alpha_MV_opt[T_test, ]
-
-# Cartera media (promedio en el tiempo)
-alpha_MV_media   <- apply(alpha_MV_opt, 2, mean)
-
-cat("\n=== ALPHAS MV CON CORTOS (gammaMV =", gammaMV, ") ===\n")
-cat("Primera cartera:\n")
-print(alpha_MV_primera)
-
-cat("\nÚltima cartera:\n")
-print(alpha_MV_ultima)
-
-cat("\nCartera media (promedio temporal):\n")
-print(alpha_MV_media)
-
-
-############################
-# 2) MEDIA-VARIANZA SIN CORTOS (gammaMVPos)
-############################
-
-alpha_MVPos_opt <- getAlpha_ts(
-  mu_hat, se_hat,
-  gammaMVPos,
-  getSigmaMVPos, getAlphaMVPos,
-  Xtrain, Xtest
-)
-
-dim(alpha_MVPos_opt)
-
-alpha_MVPos_primera <- alpha_MVPos_opt[1, ]
-alpha_MVPos_ultima  <- alpha_MVPos_opt[T_test, ]
-alpha_MVPos_media   <- apply(alpha_MVPos_opt, 2, mean)
-
-cat("\n=== ALPHAS MV SIN CORTOS (gammaMVPos =", gammaMVPos, ") ===\n")
-cat("Primera cartera:\n")
-print(alpha_MVPos_primera)
-
-cat("\nÚltima cartera:\n")
-print(alpha_MVPos_ultima)
-
-cat("\nCartera media (promedio temporal):\n")
-print(alpha_MVPos_media)
-
-
-############################
-# 3) (OPCIONAL) UTILIDAD LOG (gammaLog)
-############################
-
-alpha_Log_opt <- getAlpha_ts(
-  mu_hat, se_hat,
-  gammaLog,
-  getSigmaLog, getAlphaLog,
-  Xtrain, Xtest
-)
-
-dim(alpha_Log_opt)
-
-alpha_Log_primera <- alpha_Log_opt[1, ]
-alpha_Log_ultima  <- alpha_Log_opt[T_test, ]
-alpha_Log_media   <- apply(alpha_Log_opt, 2, mean)
-
-cat("\n=== ALPHAS UTILIDAD LOG (gammaLog =", gammaLog, ") ===\n")
-cat("Primera cartera:\n")
-print(alpha_Log_primera)
-
-cat("\nÚltima cartera:\n")
-print(alpha_Log_ultima)
-
-cat("\nCartera media (promedio temporal):\n")
-print(alpha_Log_media)
-
-
-
-
-
-
-
-
-
-
-####################################################
-####################################################
-####################################################
 
 ###############################################################################
 # SELECCIÓN DE GAMMAS ÓPTIMOS SEGÚN SHARPE (USANDO Xtrain + Xtest)
